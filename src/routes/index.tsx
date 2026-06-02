@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import softfocusLogo from "@/assets/softfocus-logo.webp.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
