@@ -58,7 +58,7 @@ const MOODS: Mood[] = [
   { id: "stressed", label: "Estressado", emoji: "🤯", score: 1 },
   { id: "bad", label: "Desanimado", emoji: "😔", score: 2 },
   { id: "neutral", label: "Neutro", emoji: "😐", score: 3 },
-  { id: "good", label: "Feliz / Produtivo", emoji: "🙂", score: 4 },
+  { id: "good", label: "Feliz", emoji: "🙂", score: 4 },
   { id: "radiant", label: "Radiante", emoji: "🤩", score: 5 },
 ];
 
@@ -71,6 +71,21 @@ function App() {
   const [employeeId, setEmployeeId] = useState("");
   const [submissions, setSubmissions] = useState<Submission[]>(INITIAL_SUBMISSIONS);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
+  const [ceoAuth, setCeoAuth] = useState(false);
+  const [ceoUser, setCeoUser] = useState("");
+  const [ceoPass, setCeoPass] = useState("");
+
+  const handleCeoLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ceoUser.trim().toLowerCase() === "ceo" && ceoPass === "ceo123") {
+      setCeoAuth(true);
+      setCeoUser("");
+      setCeoPass("");
+      showAlert("success", " ACESSO AUTORIZADO! ");
+    } else {
+      showAlert("error", " CREDENCIAIS INVÁLIDAS! ");
+    }
+  };
 
   const showAlert = (type: AlertState["type"], message: string) => {
     setAlert({ show: true, type, message });
@@ -165,37 +180,12 @@ function App() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
               </svg>
-              Softfolks Clima Dashboard
+              CEO Dashboard
             </button>
           </div>
         </div>
       </header>
 
-      <section className="bg-slate-100 border-b border-slate-200 py-3 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs md:text-sm text-slate-600">
-            <span className="inline-flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Dica de Teste</span>
-            <span>Utilize um dos IDs abaixo para validar o registro de humor dos colaboradores cadastrados na base:</span>
-          </div>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {MOCK_EMPLOYEES.map((emp) => (
-              <button
-                key={emp.id}
-                onClick={() => {
-                  setEmployeeId(emp.id);
-                  showAlert("success", `ID ${emp.id} de ${emp.name} selecionado!`);
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 rounded text-xs font-mono font-bold transition-all text-slate-700 cursor-pointer shadow-sm"
-                title={`Clique para usar ${emp.name}`}
-              >
-                <span className="text-[10px] text-slate-400 font-sans">ID:</span>
-                {emp.id}
-                <span className="text-[10px] text-slate-400 font-normal font-sans">({emp.name.split(" ")[0]})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {alert.show && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4 animate-bounce">
@@ -232,8 +222,8 @@ function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {activeTab === "register" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-7 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
               <div className="bg-[#0a1d37] p-6 text-white border-b-2 border-emerald-500">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <span className="text-emerald-400">⚡</span> Como está seu dia na Softfocus hoje?
@@ -296,7 +286,7 @@ function App() {
                       Confirme seu ID de colaborador
                     </label>
                     <p className="text-xs text-slate-500 mb-3">
-                      Para segurança e autenticação, insira seu identificador de crachá único (SF-XXXX).
+                      Informe o identificador único de crachá (SF-XXXX) presente em seu cartão da empresa.
                     </p>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -306,7 +296,7 @@ function App() {
                         type="text"
                         value={employeeId}
                         onChange={(e) => setEmployeeId(e.target.value)}
-                        placeholder="SF-4012"
+                        placeholder="SF-XXXX"
                         className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-3 text-slate-800 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0a1d37] focus:border-transparent transition-all uppercase placeholder:text-slate-300"
                       />
                     </div>
@@ -324,59 +314,73 @@ function App() {
                 </button>
               </form>
             </div>
+          </div>
+        )}
 
-            <div className="lg:col-span-5 space-y-6">
-              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6">
-                <h3 className="text-[#0a1d37] font-bold text-lg mb-3 flex items-center gap-2">
-                  <span className="p-1 bg-emerald-50 text-emerald-600 rounded">ℹ️</span>
-                  Validação ativa de segurança
-                </h3>
-                <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                  O sistema está integrado à tabela de pessoal oficial da Softfocus de Pato Branco. Caso seja informado um ID incompatível, a entrega do humor é impedida para evitar registros indevidos ou duplicados.
+        {activeTab === "dashboard" && !ceoAuth && (
+          <div className="max-w-md mx-auto mt-8">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <div className="bg-[#0a1d37] p-6 text-white border-b-2 border-emerald-500 text-center">
+                <div className="inline-flex w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 items-center justify-center mb-3">
+                  <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3zm-7 9a7 7 0 1114 0H5z" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-extrabold uppercase tracking-wider">Acesso Restrito - CEO</h2>
+                <p className="text-xs text-slate-300 mt-1">Informe suas credenciais executivas para continuar.</p>
+              </div>
+              <form onSubmit={handleCeoLogin} className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">ID do CEO</label>
+                  <input
+                    type="text"
+                    value={ceoUser}
+                    onChange={(e) => setCeoUser(e.target.value)}
+                    placeholder="Digite seu usuário"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">Senha</label>
+                  <input
+                    type="password"
+                    value={ceoPass}
+                    onChange={(e) => setCeoPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg border-b-4 border-emerald-500 transition-all cursor-pointer"
+                >
+                  Entrar no painel
+                </button>
+                <p className="text-[11px] text-center text-slate-400">
+                  Demo: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">ceo</code> / <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">ceo123</code>
                 </p>
-                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start gap-2.5">
-                  <span className="text-base">⚠️</span>
-                  <div>
-                    <span className="font-extrabold">Atenção avaliadores:</span> Para testar o fluxo de erro, tente digitar qualquer outro código (ex.: <code className="font-mono bg-amber-100 px-1 rounded font-bold">SF-9999</code>) para obter a mensagem instantânea de <code className="font-bold">ID INCORRETO!</code>.
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-                <div className="bg-[#0a1d37] text-white px-6 py-4 flex items-center justify-between">
-                  <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Banco de dados oficial (5 colaboradores)
-                  </h3>
-                  <span className="text-[10px] font-bold bg-slate-800 px-2 py-1 rounded text-emerald-400">MOCK_DB</span>
-                </div>
-                <div className="p-4 divide-y divide-slate-100">
-                  {MOCK_EMPLOYEES.map((employee) => (
-                    <div key={employee.id} className="py-3 flex items-center justify-between hover:bg-slate-50 transition-all rounded px-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-[#0a1d37] text-white font-extrabold flex items-center justify-center text-xs">
-                          {employee.name.split(" ").map((n) => n[0]).join("")}
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800 text-sm">{employee.name}</p>
-                          <p className="text-slate-400 text-xs">
-                            {employee.role} • <span className="font-medium text-[#0a1d37]">{employee.department}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="font-mono text-xs font-extrabold bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg">
-                        {employee.id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </form>
             </div>
           </div>
         )}
 
-        {activeTab === "dashboard" && (
+        {activeTab === "dashboard" && ceoAuth && (
           <div className="space-y-8">
+            <div className="bg-white p-4 rounded-2xl shadow border border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-slate-500">Sessão Executiva</p>
+                  <p className="text-sm font-bold text-[#0a1d37]">CEO autenticado · Painel da Diretoria</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setCeoAuth(false); setActiveTab("register"); }}
+                className="text-xs font-extrabold uppercase tracking-wider px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+              >
+                Sair (Logout)
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-emerald-500 flex items-center justify-between">
                 <div>
@@ -491,6 +495,36 @@ function App() {
                     <div className="text-center py-12 text-slate-400 text-sm">Nenhum registro efetuado hoje.</div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <div className="bg-[#0a1d37] text-white px-6 py-4 flex items-center justify-between">
+                <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Banco de dados oficial (5 colaboradores)
+                </h3>
+                <span className="text-[10px] font-bold bg-slate-800 px-2 py-1 rounded text-emerald-400">MOCK_DB</span>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {MOCK_EMPLOYEES.map((employee) => (
+                  <div key={employee.id} className="py-3 px-3 flex items-center justify-between hover:bg-slate-50 transition-all rounded-lg border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[#0a1d37] text-white font-extrabold flex items-center justify-center text-xs">
+                        {employee.name.split(" ").map((n) => n[0]).join("")}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{employee.name}</p>
+                        <p className="text-slate-400 text-xs">
+                          {employee.role} • <span className="font-medium text-[#0a1d37]">{employee.department}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs font-extrabold bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg">
+                      {employee.id}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
