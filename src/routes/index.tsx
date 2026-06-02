@@ -128,11 +128,8 @@ function App() {
       <header className="bg-[#0a1d37] text-white shadow-xl border-b-4 border-emerald-500">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <svg className="w-8 h-8 text-[#0a1d37]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12c0 3.866 3.134 7 7 7s7-3.134 7-7" className="stroke-emerald-300" />
-              </svg>
+            <div className="p-2 bg-white rounded-lg flex items-center justify-center shadow-lg">
+              <img src={softfocusLogo.url} alt="Softfocus" className="h-10 w-auto" />
             </div>
             <div>
               <div className="flex items-center gap-2">
