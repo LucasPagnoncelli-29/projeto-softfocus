@@ -483,6 +483,37 @@ function App() {
                 </div>
               </div>
             </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <div className="bg-[#0a1d37] text-white px-6 py-4 flex items-center justify-between">
+                <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Banco de dados oficial (5 colaboradores)
+                </h3>
+                <span className="text-[10px] font-bold bg-slate-800 px-2 py-1 rounded text-emerald-400">MOCK_DB</span>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {MOCK_EMPLOYEES.map((employee) => (
+                  <div key={employee.id} className="py-3 px-3 flex items-center justify-between hover:bg-slate-50 transition-all rounded-lg border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[#0a1d37] text-white font-extrabold flex items-center justify-center text-xs">
+                        {employee.name.split(" ").map((n) => n[0]).join("")}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{employee.name}</p>
+                        <p className="text-slate-400 text-xs">
+                          {employee.role} • <span className="font-medium text-[#0a1d37]">{employee.department}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs font-extrabold bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg">
+                      {employee.id}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </main>
