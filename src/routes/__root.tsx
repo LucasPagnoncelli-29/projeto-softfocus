@@ -82,6 +82,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Happiness Door · Totem" },
       { property: "og:description", content: "Registre como você está se sentindo hoje." },
       { property: "og:type", content: "website" },
+      { name: "twitter:title", content: "Happiness Door · Totem" },
+      { name: "twitter:description", content: "Registre como você está se sentindo hoje." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/861feade-3001-4fbc-aee7-8c3cd65a0a56/id-preview-bc5e59c8--3f47ca60-5fdc-4393-85e1-6e7fc5f3bd1b.lovable.app-1780423482949.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/861feade-3001-4fbc-aee7-8c3cd65a0a56/id-preview-bc5e59c8--3f47ca60-5fdc-4393-85e1-6e7fc5f3bd1b.lovable.app-1780423482949.png" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
