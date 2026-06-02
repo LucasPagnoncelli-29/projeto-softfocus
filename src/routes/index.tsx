@@ -365,8 +365,22 @@ function App() {
         )}
 
         {activeTab === "dashboard" && ceoAuth && (
-
           <div className="space-y-8">
+            <div className="bg-white p-4 rounded-2xl shadow border border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div>
+                  <p className="text-xs uppercase font-extrabold tracking-wider text-slate-500">Sessão Executiva</p>
+                  <p className="text-sm font-bold text-[#0a1d37]">CEO autenticado · Painel da Diretoria</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setCeoAuth(false); setActiveTab("register"); }}
+                className="text-xs font-extrabold uppercase tracking-wider px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+              >
+                Sair (Logout)
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-emerald-500 flex items-center justify-between">
                 <div>
