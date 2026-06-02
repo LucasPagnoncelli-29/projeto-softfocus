@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as CeoLoginRouteImport } from './routes/ceo-login'
+import { Route as CeoDashboardRouteImport } from './routes/ceo-dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 
 const CeoLoginRoute = CeoLoginRouteImport.update({
   id: '/ceo-login',
   path: '/ceo-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CeoDashboardRoute = CeoDashboardRouteImport.update({
+  id: '/ceo-dashboard',
+  path: '/ceo-dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ceo-dashboard': typeof CeoDashboardRoute
   '/ceo-login': typeof CeoLoginRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ceo-dashboard': typeof CeoDashboardRoute
   '/ceo-login': typeof CeoLoginRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ceo-dashboard': typeof CeoDashboardRoute
   '/ceo-login': typeof CeoLoginRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ceo-login'
+  fullPaths: '/' | '/ceo-dashboard' | '/ceo-login'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ceo-login'
-  id: '__root__' | '/' | '/ceo-login'
+  to: '/' | '/ceo-dashboard' | '/ceo-login'
+  id: '__root__' | '/' | '/ceo-dashboard' | '/ceo-login'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CeoDashboardRoute: typeof CeoDashboardRoute
   CeoLoginRoute: typeof CeoLoginRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/ceo-login'
       fullPath: '/ceo-login'
       preLoaderRoute: typeof CeoLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ceo-dashboard': {
+      id: '/ceo-dashboard'
+      path: '/ceo-dashboard'
+      fullPath: '/ceo-dashboard'
+      preLoaderRoute: typeof CeoDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CeoDashboardRoute: CeoDashboardRoute,
   CeoLoginRoute: CeoLoginRoute,
 }
 export const routeTree = rootRouteImport
