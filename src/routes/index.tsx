@@ -58,7 +58,7 @@ const MOODS: Mood[] = [
   { id: "stressed", label: "Estressado", emoji: "🤯", score: 1 },
   { id: "bad", label: "Desanimado", emoji: "😔", score: 2 },
   { id: "neutral", label: "Neutro", emoji: "😐", score: 3 },
-  { id: "good", label: "Feliz / Produtivo", emoji: "🙂", score: 4 },
+  { id: "good", label: "Feliz", emoji: "🙂", score: 4 },
   { id: "radiant", label: "Radiante", emoji: "🤩", score: 5 },
 ];
 
@@ -71,6 +71,21 @@ function App() {
   const [employeeId, setEmployeeId] = useState("");
   const [submissions, setSubmissions] = useState<Submission[]>(INITIAL_SUBMISSIONS);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
+  const [ceoAuth, setCeoAuth] = useState(false);
+  const [ceoUser, setCeoUser] = useState("");
+  const [ceoPass, setCeoPass] = useState("");
+
+  const handleCeoLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ceoUser.trim().toLowerCase() === "ceo" && ceoPass === "ceo123") {
+      setCeoAuth(true);
+      setCeoUser("");
+      setCeoPass("");
+      showAlert("success", " ACESSO AUTORIZADO! ");
+    } else {
+      showAlert("error", " CREDENCIAIS INVÁLIDAS! ");
+    }
+  };
 
   const showAlert = (type: AlertState["type"], message: string) => {
     setAlert({ show: true, type, message });
@@ -165,37 +180,12 @@ function App() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
               </svg>
-              Softfolks Clima Dashboard
+              CEO Dashboard
             </button>
           </div>
         </div>
       </header>
 
-      <section className="bg-slate-100 border-b border-slate-200 py-3 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs md:text-sm text-slate-600">
-            <span className="inline-flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Dica de Teste</span>
-            <span>Utilize um dos IDs abaixo para validar o registro de humor dos colaboradores cadastrados na base:</span>
-          </div>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {MOCK_EMPLOYEES.map((emp) => (
-              <button
-                key={emp.id}
-                onClick={() => {
-                  setEmployeeId(emp.id);
-                  showAlert("success", `ID ${emp.id} de ${emp.name} selecionado!`);
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 rounded text-xs font-mono font-bold transition-all text-slate-700 cursor-pointer shadow-sm"
-                title={`Clique para usar ${emp.name}`}
-              >
-                <span className="text-[10px] text-slate-400 font-sans">ID:</span>
-                {emp.id}
-                <span className="text-[10px] text-slate-400 font-normal font-sans">({emp.name.split(" ")[0]})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {alert.show && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4 animate-bounce">
