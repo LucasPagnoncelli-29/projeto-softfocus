@@ -483,7 +483,6 @@ function App() {
                 </div>
               </div>
             </div>
-            </div>
 
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
               <div className="bg-[#0a1d37] text-white px-6 py-4 flex items-center justify-between">
