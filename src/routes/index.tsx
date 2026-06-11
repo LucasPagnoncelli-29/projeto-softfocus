@@ -133,6 +133,9 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), items: submissions }));
   }, [submissions]);
 
+  const [archive, setArchive] = useState<ArchiveDay[]>(() => loadArchive());
+  const [distPeriod, setDistPeriod] = useState<"day" | "week" | "month">("day");
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const check = () => {
@@ -141,8 +144,10 @@ function App() {
       try {
         const parsed = JSON.parse(raw) as { date: string };
         if (parsed.date !== todayKey()) {
+          archiveYesterdayIfNeeded();
           localStorage.removeItem(STORAGE_KEY);
           setSubmissions([]);
+          setArchive(loadArchive());
         }
       } catch {
         /* ignore */
