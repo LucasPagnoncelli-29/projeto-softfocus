@@ -224,6 +224,46 @@ function App() {
     return Math.round((count / totalSubmissions) * 100);
   };
 
+  const periodCounts = (() => {
+    const now = new Date();
+    const todayC = countsFrom(submissions);
+    if (distPeriod === "day") return todayC;
+    const startDate = new Date(now);
+    if (distPeriod === "week") {
+      startDate.setDate(now.getDate() - 6);
+    } else {
+      startDate.setDate(1);
+    }
+    startDate.setHours(0, 0, 0, 0);
+    const merged: MoodCounts = { ...todayC };
+    for (const day of archive) {
+      const [y, m, d] = day.date.split("-").map(Number);
+      const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+      if (dt >= startDate && dt <= now && day.date !== todayKey()) {
+        for (const [k, v] of Object.entries(day.counts)) {
+          merged[k] = (merged[k] ?? 0) + v;
+        }
+      }
+    }
+    return merged;
+  })();
+
+  const periodTotal = Object.values(periodCounts).reduce((a, b) => a + b, 0);
+  const getPeriodPercentage = (moodId: MoodId) =>
+    periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
+  const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
+
+  const moodBarColor = (id: MoodId) =>
+    id === "stressed"
+      ? "bg-red-500"
+      : id === "bad"
+      ? "bg-orange-500"
+      : id === "neutral"
+      ? "bg-amber-500"
+      : id === "good"
+      ? "bg-emerald-500"
+      : "bg-teal-500";
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <header className="bg-[#0a1d37] text-white shadow-xl border-b-4 border-emerald-500">
