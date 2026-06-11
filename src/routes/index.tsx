@@ -550,14 +550,36 @@ function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
-                <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-6 flex items-center gap-2">
-                  <span>📊</span> Distribuição de humor hoje
+            <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm flex items-center gap-2">
+                  <span>📊</span> Distribuição de humor {distPeriod === "day" ? "hoje" : distPeriod === "week" ? "(últimos 7 dias)" : "(este mês)"}
                 </h3>
+                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
+                  {([
+                    { id: "day", label: "Diário" },
+                    { id: "week", label: "Semanal" },
+                    { id: "month", label: "Mensal" },
+                  ] as const).map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setDistPeriod(p.id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        distPeriod === p.id
+                          ? "bg-[#0a1d37] text-emerald-400 shadow"
+                          : "text-slate-500 hover:text-[#0a1d37]"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   {MOODS.map((mood) => {
-                    const percentage = getMoodDistributionPercentage(mood.id);
+                    const percentage = getPeriodPercentage(mood.id);
                     return (
                       <div key={mood.id} className="space-y-1">
                         <div className="flex items-center justify-between text-xs font-bold text-slate-700">
@@ -569,17 +591,7 @@ function App() {
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-slate-200/50">
                           <div
-                            className={`h-full rounded-full transition-all duration-1000 ${
-                              mood.id === "stressed"
-                                ? "bg-red-500"
-                                : mood.id === "bad"
-                                ? "bg-orange-500"
-                                : mood.id === "neutral"
-                                ? "bg-amber-500"
-                                : mood.id === "good"
-                                ? "bg-emerald-500"
-                                : "bg-teal-500"
-                            }`}
+                            className={`h-full rounded-full transition-all duration-1000 ${moodBarColor(mood.id)}`}
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -587,7 +599,40 @@ function App() {
                     );
                   })}
                 </div>
+
+                <div className="border-l border-slate-100 md:pl-6 flex flex-col">
+                  <p className="text-[10px] uppercase tracking-widest font-extrabold text-slate-400 mb-3">
+                    Volume de registros · total {periodTotal}
+                  </p>
+                  <div className="flex-1 flex items-end justify-between gap-2 h-56 border-b border-slate-200 pb-2">
+                    {MOODS.map((mood) => {
+                      const count = periodCounts[mood.id] ?? 0;
+                      const heightPct = (count / periodMax) * 100;
+                      return (
+                        <div key={mood.id} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                          <span className="text-[10px] font-extrabold text-slate-600">{count}</span>
+                          <div
+                            className={`w-full rounded-t-md transition-all duration-700 ${moodBarColor(mood.id)} ${count === 0 ? "opacity-30 min-h-[4px]" : ""}`}
+                            style={{ height: `${count === 0 ? 2 : Math.max(heightPct, 6)}%` }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between gap-2 mt-2">
+                    {MOODS.map((mood) => (
+                      <div key={mood.id} className="flex-1 text-center text-lg" title={mood.label}>
+                        {mood.emoji}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-12 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 hidden" />
+
 
               <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
