@@ -630,11 +630,9 @@ function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-12 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 hidden" />
+            <div className="grid grid-cols-1 gap-8">
+              <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
 
-
-              <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
                   <span className="flex items-center gap-2">⏱️ Últimos registros efetuados</span>
                   <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado</span>
