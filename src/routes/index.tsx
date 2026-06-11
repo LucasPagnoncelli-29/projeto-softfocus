@@ -47,10 +47,51 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 const STORAGE_KEY = "softfocus-mood-submissions";
+const ARCHIVE_KEY = "softfocus-mood-archive";
+
+type MoodCounts = Record<string, number>;
+interface ArchiveDay { date: string; counts: MoodCounts }
 
 function todayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function countsFrom(items: Submission[]): MoodCounts {
+  const c: MoodCounts = {};
+  for (const it of items) c[it.mood] = (c[it.mood] ?? 0) + 1;
+  return c;
+}
+
+function loadArchive(): ArchiveDay[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ARCHIVE_KEY) ?? "[]") as ArchiveDay[];
+  } catch {
+    return [];
+  }
+}
+
+function saveArchive(arr: ArchiveDay[]) {
+  // keep last 90 days
+  const trimmed = arr.slice(-90);
+  localStorage.setItem(ARCHIVE_KEY, JSON.stringify(trimmed));
+}
+
+function archiveYesterdayIfNeeded() {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
+    if (parsed.date !== todayKey() && parsed.items?.length) {
+      const arch = loadArchive().filter((d) => d.date !== parsed.date);
+      arch.push({ date: parsed.date, counts: countsFrom(parsed.items) });
+      saveArchive(arch);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function loadTodaySubmissions(): Submission[] {
@@ -60,6 +101,7 @@ function loadTodaySubmissions(): Submission[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
     if (parsed.date !== todayKey()) {
+      archiveYesterdayIfNeeded();
       localStorage.removeItem(STORAGE_KEY);
       return [];
     }
