@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import softfocusLogo from "@/assets/softfocus-logo.webp.asset.json";
 
 export const Route = createFileRoute("/")({
@@ -46,13 +46,28 @@ const MOCK_EMPLOYEES: Employee[] = [
   { id: "SF-3329", name: "Rodrigo Santos", role: "Engenheiro de QA", department: "Qualidade" },
 ];
 
-const INITIAL_SUBMISSIONS: Submission[] = [
-  { id: 1, employeeId: "SF-4012", name: "Márcio Cardozo", mood: "radiant", score: 5, comment: "Excelente dia de planejamento e cocriação de soluções!", timestamp: "Hoje, 09:30" },
-  { id: 2, employeeId: "SF-7781", name: "Amanda Silveira", mood: "good", score: 4, comment: "Refatoração de código fluindo super bem no projeto de crédito.", timestamp: "Hoje, 10:15" },
-  { id: 3, employeeId: "SF-2093", name: "Cezar Andrade", mood: "neutral", score: 3, comment: "Muitas reuniões operacionais sobre o Sicor hoje.", timestamp: "Ontem, 16:45" },
-  { id: 4, employeeId: "SF-5104", name: "Letícia Pato", mood: "radiant", score: 5, comment: "Design do novo fluxo do Proagro foi validado com sucesso!", timestamp: "Ontem, 14:20" },
-  { id: 5, employeeId: "SF-3329", name: "Rodrigo Santos", mood: "bad", score: 2, comment: "Alguns bloqueios técnicos nos testes automatizados, mas buscando evoluir.", timestamp: "Ontem, 11:05" },
-];
+const STORAGE_KEY = "softfocus-mood-submissions";
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function loadTodaySubmissions(): Submission[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
+    if (parsed.date !== todayKey()) {
+      localStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
+    return parsed.items ?? [];
+  } catch {
+    return [];
+  }
+}
 
 const MOODS: Mood[] = [
   { id: "stressed", label: "Estressado", emoji: "🤯", score: 1 },
@@ -69,7 +84,31 @@ function App() {
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [comment, setComment] = useState("");
   const [employeeId, setEmployeeId] = useState("");
-  const [submissions, setSubmissions] = useState<Submission[]>(INITIAL_SUBMISSIONS);
+  const [submissions, setSubmissions] = useState<Submission[]>(() => loadTodaySubmissions());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), items: submissions }));
+  }, [submissions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const check = () => {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as { date: string };
+        if (parsed.date !== todayKey()) {
+          localStorage.removeItem(STORAGE_KEY);
+          setSubmissions([]);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
   const [ceoAuth, setCeoAuth] = useState(false);
   const [ceoUser, setCeoUser] = useState("");
