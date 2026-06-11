@@ -38,12 +38,12 @@ interface Mood {
   score: number;
 }
 
-const MOCK_EMPLOYEES: Employee[] = [
-  { id: "SF-4012", name: "Márcio Cardozo", role: "Diretor de Tecnologia", department: "P&D" },
-  { id: "SF-7781", name: "Amanda Silveira", role: "Desenvolvedora Frontend", department: "Fábrica de Software" },
-  { id: "SF-2093", name: "Cezar Andrade", role: "Especialista em Crédito Rural", department: "Agro" },
-  { id: "SF-5104", name: "Letícia Pato", role: "Product Designer", department: "UX/UI" },
-  { id: "SF-3329", name: "Rodrigo Santos", role: "Engenheiro de QA", department: "Qualidade" },
+const MOCK_EMPLOYEES: (Employee & { phone: string })[] = [
+  { id: "SF-4012", name: "Márcio Cardozo", role: "Diretor de Tecnologia", department: "P&D", phone: "(46) 99122-3841" },
+  { id: "SF-7781", name: "Amanda Silveira", role: "Desenvolvedora Frontend", department: "Fábrica de Software", phone: "(46) 98815-4029" },
+  { id: "SF-2093", name: "Cezar Andrade", role: "Especialista em Crédito Rural", department: "Agro", phone: "(46) 99911-7732" },
+  { id: "SF-5104", name: "Letícia Pato", role: "Product Designer", department: "UX/UI", phone: "(46) 99104-5151" },
+  { id: "SF-3329", name: "Rodrigo Santos", role: "Engenheiro de QA", department: "Qualidade", phone: "(46) 98402-3329" },
 ];
 
 const STORAGE_KEY = "softfocus-mood-submissions";
@@ -675,23 +675,31 @@ function App() {
                 </h3>
                 <span className="text-[10px] font-bold bg-slate-800 px-2 py-1 rounded text-emerald-400">MOCK_DB</span>
               </div>
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {MOCK_EMPLOYEES.map((employee) => (
-                  <div key={employee.id} className="py-3 px-3 flex items-center justify-between hover:bg-slate-50 transition-all rounded-lg border border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#0a1d37] text-white font-extrabold flex items-center justify-center text-xs">
+                  <div key={employee.id} className="p-4 rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all bg-white">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-[#0a1d37] text-white font-extrabold flex items-center justify-center text-xs shrink-0">
                         {employee.name.split(" ").map((n) => n[0]).join("")}
                       </div>
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">{employee.name}</p>
-                        <p className="text-slate-400 text-xs">
-                          {employee.role} • <span className="font-medium text-[#0a1d37]">{employee.department}</span>
-                        </p>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 text-sm leading-tight">{employee.name}</p>
+                        <p className="text-slate-400 text-xs">{employee.department}</p>
                       </div>
                     </div>
-                    <span className="font-mono text-xs font-extrabold bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg">
-                      {employee.id}
-                    </span>
+                    <p className="italic text-slate-500 text-xs mb-2">{employee.role}</p>
+                    <a
+                      href={`tel:+55${employee.phone.replace(/\D/g, "")}`}
+                      className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-semibold text-sm py-2 border-y border-slate-100"
+                    >
+                      <span aria-hidden>📞</span> {employee.phone}
+                    </a>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Crachá:</span>
+                      <span className="font-mono text-xs font-extrabold bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg">
+                        {employee.id}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
