@@ -47,10 +47,51 @@ const MOCK_EMPLOYEES: Employee[] = [
 ];
 
 const STORAGE_KEY = "softfocus-mood-submissions";
+const ARCHIVE_KEY = "softfocus-mood-archive";
+
+type MoodCounts = Record<string, number>;
+interface ArchiveDay { date: string; counts: MoodCounts }
 
 function todayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function countsFrom(items: Submission[]): MoodCounts {
+  const c: MoodCounts = {};
+  for (const it of items) c[it.mood] = (c[it.mood] ?? 0) + 1;
+  return c;
+}
+
+function loadArchive(): ArchiveDay[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ARCHIVE_KEY) ?? "[]") as ArchiveDay[];
+  } catch {
+    return [];
+  }
+}
+
+function saveArchive(arr: ArchiveDay[]) {
+  // keep last 90 days
+  const trimmed = arr.slice(-90);
+  localStorage.setItem(ARCHIVE_KEY, JSON.stringify(trimmed));
+}
+
+function archiveYesterdayIfNeeded() {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
+    if (parsed.date !== todayKey() && parsed.items?.length) {
+      const arch = loadArchive().filter((d) => d.date !== parsed.date);
+      arch.push({ date: parsed.date, counts: countsFrom(parsed.items) });
+      saveArchive(arch);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function loadTodaySubmissions(): Submission[] {
@@ -60,6 +101,7 @@ function loadTodaySubmissions(): Submission[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
     if (parsed.date !== todayKey()) {
+      archiveYesterdayIfNeeded();
       localStorage.removeItem(STORAGE_KEY);
       return [];
     }
@@ -91,6 +133,9 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), items: submissions }));
   }, [submissions]);
 
+  const [archive, setArchive] = useState<ArchiveDay[]>(() => loadArchive());
+  const [distPeriod, setDistPeriod] = useState<"day" | "week" | "month">("day");
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const check = () => {
@@ -99,8 +144,10 @@ function App() {
       try {
         const parsed = JSON.parse(raw) as { date: string };
         if (parsed.date !== todayKey()) {
+          archiveYesterdayIfNeeded();
           localStorage.removeItem(STORAGE_KEY);
           setSubmissions([]);
+          setArchive(loadArchive());
         }
       } catch {
         /* ignore */
@@ -176,6 +223,46 @@ function App() {
     const count = submissions.filter((s) => s.mood === moodId).length;
     return Math.round((count / totalSubmissions) * 100);
   };
+
+  const periodCounts = (() => {
+    const now = new Date();
+    const todayC = countsFrom(submissions);
+    if (distPeriod === "day") return todayC;
+    const startDate = new Date(now);
+    if (distPeriod === "week") {
+      startDate.setDate(now.getDate() - 6);
+    } else {
+      startDate.setDate(1);
+    }
+    startDate.setHours(0, 0, 0, 0);
+    const merged: MoodCounts = { ...todayC };
+    for (const day of archive) {
+      const [y, m, d] = day.date.split("-").map(Number);
+      const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+      if (dt >= startDate && dt <= now && day.date !== todayKey()) {
+        for (const [k, v] of Object.entries(day.counts)) {
+          merged[k] = (merged[k] ?? 0) + v;
+        }
+      }
+    }
+    return merged;
+  })();
+
+  const periodTotal = Object.values(periodCounts).reduce((a, b) => a + b, 0);
+  const getPeriodPercentage = (moodId: MoodId) =>
+    periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
+  const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
+
+  const moodBarColor = (id: MoodId) =>
+    id === "stressed"
+      ? "bg-red-500"
+      : id === "bad"
+      ? "bg-orange-500"
+      : id === "neutral"
+      ? "bg-amber-500"
+      : id === "good"
+      ? "bg-emerald-500"
+      : "bg-teal-500";
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -463,14 +550,36 @@ function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
-                <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-6 flex items-center gap-2">
-                  <span>📊</span> Distribuição de humor hoje
+            <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm flex items-center gap-2">
+                  <span>📊</span> Distribuição de humor {distPeriod === "day" ? "hoje" : distPeriod === "week" ? "(últimos 7 dias)" : "(este mês)"}
                 </h3>
+                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
+                  {([
+                    { id: "day", label: "Diário" },
+                    { id: "week", label: "Semanal" },
+                    { id: "month", label: "Mensal" },
+                  ] as const).map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setDistPeriod(p.id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                        distPeriod === p.id
+                          ? "bg-[#0a1d37] text-emerald-400 shadow"
+                          : "text-slate-500 hover:text-[#0a1d37]"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   {MOODS.map((mood) => {
-                    const percentage = getMoodDistributionPercentage(mood.id);
+                    const percentage = getPeriodPercentage(mood.id);
                     return (
                       <div key={mood.id} className="space-y-1">
                         <div className="flex items-center justify-between text-xs font-bold text-slate-700">
@@ -482,17 +591,7 @@ function App() {
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-slate-200/50">
                           <div
-                            className={`h-full rounded-full transition-all duration-1000 ${
-                              mood.id === "stressed"
-                                ? "bg-red-500"
-                                : mood.id === "bad"
-                                ? "bg-orange-500"
-                                : mood.id === "neutral"
-                                ? "bg-amber-500"
-                                : mood.id === "good"
-                                ? "bg-emerald-500"
-                                : "bg-teal-500"
-                            }`}
+                            className={`h-full rounded-full transition-all duration-1000 ${moodBarColor(mood.id)}`}
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -500,9 +599,40 @@ function App() {
                     );
                   })}
                 </div>
-              </div>
 
-              <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
+                <div className="border-l border-slate-100 md:pl-6 flex flex-col">
+                  <p className="text-[10px] uppercase tracking-widest font-extrabold text-slate-400 mb-3">
+                    Volume de registros · total {periodTotal}
+                  </p>
+                  <div className="flex-1 flex items-end justify-between gap-2 h-56 border-b border-slate-200 pb-2">
+                    {MOODS.map((mood) => {
+                      const count = periodCounts[mood.id] ?? 0;
+                      const heightPct = (count / periodMax) * 100;
+                      return (
+                        <div key={mood.id} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                          <span className="text-[10px] font-extrabold text-slate-600">{count}</span>
+                          <div
+                            className={`w-full rounded-t-md transition-all duration-700 ${moodBarColor(mood.id)} ${count === 0 ? "opacity-30 min-h-[4px]" : ""}`}
+                            style={{ height: `${count === 0 ? 2 : Math.max(heightPct, 6)}%` }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between gap-2 mt-2">
+                    {MOODS.map((mood) => (
+                      <div key={mood.id} className="flex-1 text-center text-lg" title={mood.label}>
+                        {mood.emoji}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8">
+              <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
+
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
                   <span className="flex items-center gap-2">⏱️ Últimos registros efetuados</span>
                   <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado</span>
