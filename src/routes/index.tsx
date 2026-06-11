@@ -84,7 +84,31 @@ function App() {
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [comment, setComment] = useState("");
   const [employeeId, setEmployeeId] = useState("");
-  const [submissions, setSubmissions] = useState<Submission[]>(INITIAL_SUBMISSIONS);
+  const [submissions, setSubmissions] = useState<Submission[]>(() => loadTodaySubmissions());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), items: submissions }));
+  }, [submissions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const check = () => {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as { date: string };
+        if (parsed.date !== todayKey()) {
+          localStorage.removeItem(STORAGE_KEY);
+          setSubmissions([]);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const id = setInterval(check, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
   const [ceoAuth, setCeoAuth] = useState(false);
   const [ceoUser, setCeoUser] = useState("");
