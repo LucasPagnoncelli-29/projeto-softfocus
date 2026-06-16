@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import softfocusLogo from "@/assets/softfocus-logo.webp.asset.json";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,13 +23,14 @@ interface Employee {
 }
 
 interface Submission {
-  id: number;
+  id: string;
   employeeId: string;
   name: string;
   mood: MoodId;
   score: number;
   comment: string;
   timestamp: string;
+  submissionDate: string;
 }
 
 interface Mood {
@@ -46,68 +48,27 @@ const MOCK_EMPLOYEES: (Employee & { phone: string })[] = [
   { id: "SF-3329", name: "Rodrigo Santos", role: "Engenheiro de QA", department: "Qualidade", phone: "(46) 98402-3329" },
 ];
 
-const STORAGE_KEY = "softfocus-mood-submissions";
-const ARCHIVE_KEY = "softfocus-mood-archive";
-
 type MoodCounts = Record<string, number>;
 interface ArchiveDay { date: string; counts: MoodCounts }
 
 function todayKey() {
+  // Use São Paulo locale to match DB default (America/Sao_Paulo)
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(d); // YYYY-MM-DD
 }
 
-function countsFrom(items: Submission[]): MoodCounts {
-  const c: MoodCounts = {};
-  for (const it of items) c[it.mood] = (c[it.mood] ?? 0) + 1;
-  return c;
-}
-
-function loadArchive(): ArchiveDay[] {
-  if (typeof window === "undefined") return [];
+function formatTimestamp(iso: string): string {
   try {
-    return JSON.parse(localStorage.getItem(ARCHIVE_KEY) ?? "[]") as ArchiveDay[];
+    const d = new Date(iso);
+    return d.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   } catch {
-    return [];
-  }
-}
-
-function saveArchive(arr: ArchiveDay[]) {
-  // keep last 90 days
-  const trimmed = arr.slice(-90);
-  localStorage.setItem(ARCHIVE_KEY, JSON.stringify(trimmed));
-}
-
-function archiveYesterdayIfNeeded() {
-  if (typeof window === "undefined") return;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-  try {
-    const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
-    if (parsed.date !== todayKey() && parsed.items?.length) {
-      const arch = loadArchive().filter((d) => d.date !== parsed.date);
-      arch.push({ date: parsed.date, counts: countsFrom(parsed.items) });
-      saveArchive(arch);
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadTodaySubmissions(): Submission[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { date: string; items: Submission[] };
-    if (parsed.date !== todayKey()) {
-      archiveYesterdayIfNeeded();
-      localStorage.removeItem(STORAGE_KEY);
-      return [];
-    }
-    return parsed.items ?? [];
-  } catch {
-    return [];
+    return "Agora mesmo";
   }
 }
 
@@ -119,6 +80,30 @@ const MOODS: Mood[] = [
   { id: "radiant", label: "Radiante", emoji: "🤩", score: 5 },
 ];
 
+interface DbRow {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  mood: string;
+  score: number;
+  comment: string | null;
+  submission_date: string;
+  created_at: string;
+}
+
+function rowToSubmission(r: DbRow): Submission {
+  return {
+    id: r.id,
+    employeeId: r.employee_id,
+    name: r.employee_name,
+    mood: r.mood as MoodId,
+    score: r.score,
+    comment: r.comment || "Sem comentários adicionais.",
+    timestamp: formatTimestamp(r.created_at),
+    submissionDate: r.submission_date,
+  };
+}
+
 type AlertState = { show: boolean; type: "success" | "error" | "warning" | ""; message: string };
 
 function App() {
@@ -126,40 +111,91 @@ function App() {
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [comment, setComment] = useState("");
   const [employeeId, setEmployeeId] = useState("");
-  const [submissions, setSubmissions] = useState<Submission[]>(() => loadTodaySubmissions());
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), items: submissions }));
-  }, [submissions]);
-
-  const [archive, setArchive] = useState<ArchiveDay[]>(() => loadArchive());
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [archive, setArchive] = useState<ArchiveDay[]>([]);
   const [distPeriod, setDistPeriod] = useState<"day" | "week" | "month">("day");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const check = () => {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw) as { date: string };
-        if (parsed.date !== todayKey()) {
-          archiveYesterdayIfNeeded();
-          localStorage.removeItem(STORAGE_KEY);
-          setSubmissions([]);
-          setArchive(loadArchive());
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    const id = setInterval(check, 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const [submitting, setSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
   const [ceoAuth, setCeoAuth] = useState(false);
   const [ceoUser, setCeoUser] = useState("");
   const [ceoPass, setCeoPass] = useState("");
+  const [currentDay, setCurrentDay] = useState<string>(todayKey());
+
+  // Load today's submissions + archive (last 31 days excluding today)
+  const refreshAll = useCallback(async () => {
+    const today = todayKey();
+    setCurrentDay(today);
+
+    const { data: todayRows } = await supabase
+      .from("mood_submissions")
+      .select("*")
+      .eq("submission_date", today)
+      .order("created_at", { ascending: false });
+
+    setSubmissions(((todayRows ?? []) as DbRow[]).map(rowToSubmission));
+
+    // Archive: last 31 days, excluding today
+    const start = new Date();
+    start.setDate(start.getDate() - 31);
+    const startStr = start.toISOString().slice(0, 10);
+
+    const { data: archRows } = await supabase
+      .from("mood_submissions")
+      .select("mood, submission_date")
+      .gte("submission_date", startStr)
+      .lt("submission_date", today);
+
+    const map: Record<string, MoodCounts> = {};
+    for (const r of (archRows ?? []) as { mood: string; submission_date: string }[]) {
+      if (!map[r.submission_date]) map[r.submission_date] = {};
+      map[r.submission_date][r.mood] = (map[r.submission_date][r.mood] ?? 0) + 1;
+    }
+    setArchive(Object.entries(map).map(([date, counts]) => ({ date, counts })));
+  }, []);
+
+  useEffect(() => {
+    refreshAll();
+  }, [refreshAll]);
+
+  // Realtime: any insert updates the dashboard live
+  useEffect(() => {
+    const channel = supabase
+      .channel("mood_submissions_changes")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "mood_submissions" },
+        (payload) => {
+          const row = payload.new as DbRow;
+          if (row.submission_date === todayKey()) {
+            setSubmissions((prev) =>
+              prev.some((s) => s.id === row.id) ? prev : [rowToSubmission(row), ...prev]
+            );
+          } else {
+            refreshAll();
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshAll]);
+
+  // Detect midnight rollover (any device)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = todayKey();
+      if (t !== currentDay) {
+        refreshAll();
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [currentDay, refreshAll]);
+
+  const showAlert = (type: AlertState["type"], message: string) => {
+    setAlert({ show: true, type, message });
+    setTimeout(() => setAlert({ show: false, type: "", message: "" }), 5000);
+  };
 
   const handleCeoLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,13 +209,9 @@ function App() {
     }
   };
 
-  const showAlert = (type: AlertState["type"], message: string) => {
-    setAlert({ show: true, type, message });
-    setTimeout(() => setAlert({ show: false, type: "", message: "" }), 5000);
-  };
-
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!selectedMood) {
       showAlert("warning", "Por favor, selecione como você está se sentindo hoje primeiro!");
       return;
@@ -191,25 +223,56 @@ function App() {
     const employee = MOCK_EMPLOYEES.find(
       (emp) => emp.id.toUpperCase() === employeeId.trim().toUpperCase()
     );
-    if (employee) {
-      const moodObj = MOODS.find((m) => m.id === selectedMood)!;
-      const newSubmission: Submission = {
-        id: Date.now(),
-        employeeId: employee.id,
-        name: employee.name,
-        mood: selectedMood,
-        score: moodObj.score,
-        comment: comment.trim() || "Sem comentários adicionais.",
-        timestamp: "Agora mesmo",
-      };
-      setSubmissions([newSubmission, ...submissions]);
-      showAlert("success", " HUMOR REGISTADO COM SUCESSO! ");
-      setSelectedMood(null);
-      setComment("");
-      setEmployeeId("");
-    } else {
+    if (!employee) {
       showAlert("error", " ID INCORRETO! ");
+      return;
     }
+
+    setSubmitting(true);
+    const today = todayKey();
+
+    // Pre-check: same employee, same day
+    const { data: existing } = await supabase
+      .from("mood_submissions")
+      .select("id")
+      .eq("employee_id", employee.id)
+      .eq("submission_date", today)
+      .maybeSingle();
+
+    if (existing) {
+      showAlert("warning", "Você já se registrou hoje!");
+      setSubmitting(false);
+      return;
+    }
+
+    const moodObj = MOODS.find((m) => m.id === selectedMood)!;
+    const { error } = await supabase.from("mood_submissions").insert({
+      employee_id: employee.id,
+      employee_name: employee.name,
+      mood: selectedMood,
+      score: moodObj.score,
+      comment: comment.trim() || null,
+      submission_date: today,
+    });
+
+    setSubmitting(false);
+
+    if (error) {
+      // Unique violation code from Postgres
+      if (error.code === "23505") {
+        showAlert("warning", "Você já se registrou hoje!");
+        return;
+      }
+      showAlert("error", "Não foi possível registrar agora. Tente novamente.");
+      return;
+    }
+
+    showAlert("success", " HUMOR REGISTADO COM SUCESSO! ");
+    setSelectedMood(null);
+    setComment("");
+    setEmployeeId("");
+    // Realtime will append; refreshAll as a safety net
+    refreshAll();
   };
 
   const totalSubmissions = submissions.length;
@@ -218,15 +281,10 @@ function App() {
       ? (submissions.reduce((acc, c) => acc + c.score, 0) / totalSubmissions).toFixed(1)
       : "0";
 
-  const getMoodDistributionPercentage = (moodId: MoodId) => {
-    if (totalSubmissions === 0) return 0;
-    const count = submissions.filter((s) => s.mood === moodId).length;
-    return Math.round((count / totalSubmissions) * 100);
-  };
-
   const periodCounts = (() => {
     const now = new Date();
-    const todayC = countsFrom(submissions);
+    const todayC: MoodCounts = {};
+    for (const s of submissions) todayC[s.mood] = (todayC[s.mood] ?? 0) + 1;
     if (distPeriod === "day") return todayC;
     const startDate = new Date(now);
     if (distPeriod === "week") {
@@ -431,12 +489,13 @@ function App() {
 
                 <button
                   type="submit"
-                  className="w-full py-4 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg hover:shadow-xl active:scale-[0.99] transition-all flex items-center justify-center gap-2 border-b-4 border-emerald-500 cursor-pointer"
+                  disabled={submitting}
+                  className="w-full py-4 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg hover:shadow-xl active:scale-[0.99] transition-all flex items-center justify-center gap-2 border-b-4 border-emerald-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Registrar meu humor agora
+                  {submitting ? "Registrando..." : "Registrar meu humor agora"}
                 </button>
               </form>
             </div>
@@ -635,7 +694,7 @@ function App() {
 
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
                   <span className="flex items-center gap-2">⏱️ Últimos registros efetuados</span>
-                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado</span>
+                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado em tempo real</span>
                 </h3>
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 flex-1">
                   {submissions.map((sub) => {
@@ -717,17 +776,10 @@ function App() {
           </div>
           <div className="flex flex-wrap gap-4 items-center justify-center">
             <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700 text-center">
-              <p className="text-[9px] uppercase tracking-widest text-emerald-400 font-bold">FIA Employee Experience</p>
-              <p className="text-[10px] text-white font-semibold">Lugares Incríveis Para Trabalhar</p>
-            </div>
-            <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700 text-center">
-              <p className="text-[9px] uppercase tracking-widest text-emerald-400 font-bold">Certificação Clima</p>
-              <p className="text-[10px] text-white font-semibold">Gente e Cultura Softfolks</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-400">CNPJ</p>
+              <p className="font-mono text-white font-bold text-xs">04.962.314/0001-08</p>
             </div>
           </div>
-        </div>
-        <div className="max-w-7xl mx-auto mt-6 pt-6 border-t border-slate-800 text-center text-[11px]">
-          © {new Date().getFullYear()} Softfocus. Todos os direitos reservados. Projeto piloto Happiness Door para aprimoramento de clima interno.
         </div>
       </footer>
     </div>
