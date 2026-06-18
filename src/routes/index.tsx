@@ -31,7 +31,16 @@ interface Submission {
   comment: string;
   timestamp: string;
   submissionDate: string;
+  tags: string[];
 }
+
+const TAGS = [
+  "#CargaDeTrabalho",
+  "#ClimaNaEquipe",
+  "#Reconhecimento",
+  "#Ferramentas/Processos",
+  "#VidaPessoal",
+] as const;
 
 interface Mood {
   id: MoodId;
