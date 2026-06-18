@@ -121,6 +121,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<"register" | "dashboard">("register");
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [comment, setComment] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [archive, setArchive] = useState<ArchiveDay[]>([]);
@@ -131,6 +132,11 @@ function App() {
   const [ceoUser, setCeoUser] = useState("");
   const [ceoPass, setCeoPass] = useState("");
   const [currentDay, setCurrentDay] = useState<string>(todayKey());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
+  const [activeFilter, setActiveFilter] = useState<{ from: string; to: string } | null>(null);
+  const [rangeSubs, setRangeSubs] = useState<Submission[]>([]);
 
   // Load today's submissions + archive (last 31 days excluding today)
   const refreshAll = useCallback(async () => {
