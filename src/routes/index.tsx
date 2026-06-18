@@ -270,6 +270,7 @@ function App() {
       score: moodObj.score,
       comment: comment.trim() || null,
       submission_date: today,
+      tags: selectedTags,
     });
 
     setSubmitting(false);
@@ -287,10 +288,29 @@ function App() {
     showAlert("success", " HUMOR REGISTADO COM SUCESSO! ");
     setSelectedMood(null);
     setComment("");
+    setSelectedTags([]);
     setEmployeeId("");
     // Realtime will append; refreshAll as a safety net
     refreshAll();
   };
+
+  // Fetch submissions for a custom date range
+  const fetchRange = useCallback(async (from: string, to: string) => {
+    const { data } = await supabase
+      .from("mood_submissions")
+      .select("*")
+      .gte("submission_date", from)
+      .lte("submission_date", to)
+      .order("created_at", { ascending: false });
+    setRangeSubs(((data ?? []) as DbRow[]).map(rowToSubmission));
+  }, []);
+
+  useEffect(() => {
+    if (activeFilter) fetchRange(activeFilter.from, activeFilter.to);
+  }, [activeFilter, fetchRange]);
+
+  // Submissions visible in dashboard (filtered range OR today)
+  const dashSubs = activeFilter ? rangeSubs : submissions;
 
   const totalSubmissions = submissions.length;
   const averageMoodScore =
