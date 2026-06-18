@@ -518,6 +518,32 @@ function App() {
                     placeholder="Ex: Tivemos uma ótima entrega de sprint e o time resolveu os gargalos técnicos rapidamente!"
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder:text-slate-400 text-sm"
                   />
+                  <p className="text-[11px] text-slate-500 mt-3 mb-2 font-semibold uppercase tracking-wider">
+                    Ou marque um motivo rápido:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TAGS.map((tag) => {
+                      const active = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                            )
+                          }
+                          className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all cursor-pointer ${
+                            active
+                              ? "bg-emerald-500 text-[#0a1d37] border-emerald-600 shadow"
+                              : "bg-white text-slate-600 border-slate-300 hover:border-emerald-400 hover:text-emerald-700"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-100">
