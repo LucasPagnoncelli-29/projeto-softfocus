@@ -848,15 +848,57 @@ function App() {
               </div>
             </div>
 
+            <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+              <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
+                <span>☁️</span> Nuvem de tags{" "}
+                <span className="text-[10px] text-slate-400 font-bold normal-case">
+                  · principais motivos no período
+                </span>
+              </h3>
+              {sortedTags.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">
+                  Nenhuma tag registrada no período selecionado.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {sortedTags.map(([tag, count]) => {
+                    const scale = 0.85 + (count / tagMax) * 1.4;
+                    return (
+                      <span
+                        key={tag}
+                        title={`${count} ocorrência${count > 1 ? "s" : ""}`}
+                        className="font-extrabold text-[#0a1d37] hover:text-emerald-600 transition-colors cursor-default"
+                        style={{ fontSize: `${scale}rem`, lineHeight: 1.2 }}
+                      >
+                        {tag}
+                        <span className="text-[10px] font-bold text-slate-400 ml-1 align-top">
+                          {count}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 gap-8">
               <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
 
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
-                  <span className="flex items-center gap-2">⏱️ Últimos registros efetuados</span>
-                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado em tempo real</span>
+                  <span className="flex items-center gap-2">
+                    ⏱️ Últimos registros efetuados
+                    {activeFilter && (
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded normal-case">
+                        {formatBR(activeFilter.from)} → {formatBR(activeFilter.to)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">
+                    {activeFilter ? "Filtrado por período" : "Sincronizado em tempo real"}
+                  </span>
                 </h3>
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 flex-1">
-                  {submissions.map((sub) => {
+                  {dashSubs.map((sub) => {
                     const moodObj = MOODS.find((m) => m.id === sub.mood) || MOODS[2];
                     return (
                       <div key={sub.id} className="p-4 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl flex gap-3 transition-all">
@@ -871,15 +913,33 @@ function App() {
                                 {sub.employeeId}
                               </span>
                             </div>
-                            <span className="text-[11px] text-slate-400 font-medium">{sub.timestamp}</span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {activeFilter ? formatBR(sub.submissionDate) : sub.timestamp}
+                            </span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium mt-1 italic">"{sub.comment}"</p>
+                          {sub.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {sub.tags.map((t) => (
+                                <span
+                                  key={t}
+                                  className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                  {submissions.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">Nenhum registro efetuado hoje.</div>
+                  {dashSubs.length === 0 && (
+                    <div className="text-center py-12 text-slate-400 text-sm">
+                      {activeFilter
+                        ? "Nenhum registro encontrado nesse período."
+                        : "Nenhum registro efetuado hoje."}
+                    </div>
                   )}
                 </div>
               </div>
