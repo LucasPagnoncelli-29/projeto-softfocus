@@ -319,6 +319,12 @@ function App() {
       : "0";
 
   const periodCounts = (() => {
+    // When a custom date range filter is active, count directly from rangeSubs
+    if (activeFilter) {
+      const c: MoodCounts = {};
+      for (const s of rangeSubs) c[s.mood] = (c[s.mood] ?? 0) + 1;
+      return c;
+    }
     const now = new Date();
     const todayC: MoodCounts = {};
     for (const s of submissions) todayC[s.mood] = (todayC[s.mood] ?? 0) + 1;
@@ -347,6 +353,20 @@ function App() {
   const getPeriodPercentage = (moodId: MoodId) =>
     periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
   const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
+
+  // Tag frequency for word cloud (uses current dashboard set)
+  const tagCounts = (() => {
+    const c: Record<string, number> = {};
+    for (const s of dashSubs) for (const t of s.tags) c[t] = (c[t] ?? 0) + 1;
+    return c;
+  })();
+  const tagMax = Math.max(1, ...Object.values(tagCounts));
+  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+
+  const formatBR = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
 
   const moodBarColor = (id: MoodId) =>
     id === "stressed"
