@@ -98,6 +98,7 @@ interface DbRow {
   comment: string | null;
   submission_date: string;
   created_at: string;
+  tags: string[] | null;
 }
 
 function rowToSubmission(r: DbRow): Submission {
@@ -110,6 +111,7 @@ function rowToSubmission(r: DbRow): Submission {
     comment: r.comment || "Sem comentários adicionais.",
     timestamp: formatTimestamp(r.created_at),
     submissionDate: r.submission_date,
+    tags: r.tags ?? [],
   };
 }
 
