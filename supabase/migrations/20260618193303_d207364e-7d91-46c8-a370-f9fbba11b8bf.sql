@@ -1,0 +1,1 @@
+ALTER TABLE public.mood_submissions ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';

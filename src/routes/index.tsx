@@ -31,7 +31,16 @@ interface Submission {
   comment: string;
   timestamp: string;
   submissionDate: string;
+  tags: string[];
 }
+
+const TAGS = [
+  "#CargaDeTrabalho",
+  "#ClimaNaEquipe",
+  "#Reconhecimento",
+  "#Ferramentas/Processos",
+  "#VidaPessoal",
+] as const;
 
 interface Mood {
   id: MoodId;
@@ -89,6 +98,7 @@ interface DbRow {
   comment: string | null;
   submission_date: string;
   created_at: string;
+  tags: string[] | null;
 }
 
 function rowToSubmission(r: DbRow): Submission {
@@ -101,6 +111,7 @@ function rowToSubmission(r: DbRow): Submission {
     comment: r.comment || "Sem comentários adicionais.",
     timestamp: formatTimestamp(r.created_at),
     submissionDate: r.submission_date,
+    tags: r.tags ?? [],
   };
 }
 
@@ -110,6 +121,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<"register" | "dashboard">("register");
   const [selectedMood, setSelectedMood] = useState<MoodId | null>(null);
   const [comment, setComment] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [archive, setArchive] = useState<ArchiveDay[]>([]);
@@ -120,6 +132,11 @@ function App() {
   const [ceoUser, setCeoUser] = useState("");
   const [ceoPass, setCeoPass] = useState("");
   const [currentDay, setCurrentDay] = useState<string>(todayKey());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
+  const [activeFilter, setActiveFilter] = useState<{ from: string; to: string } | null>(null);
+  const [rangeSubs, setRangeSubs] = useState<Submission[]>([]);
 
   // Load today's submissions + archive (last 31 days excluding today)
   const refreshAll = useCallback(async () => {
@@ -253,6 +270,7 @@ function App() {
       score: moodObj.score,
       comment: comment.trim() || null,
       submission_date: today,
+      tags: selectedTags,
     });
 
     setSubmitting(false);
@@ -270,10 +288,29 @@ function App() {
     showAlert("success", " HUMOR REGISTADO COM SUCESSO! ");
     setSelectedMood(null);
     setComment("");
+    setSelectedTags([]);
     setEmployeeId("");
     // Realtime will append; refreshAll as a safety net
     refreshAll();
   };
+
+  // Fetch submissions for a custom date range
+  const fetchRange = useCallback(async (from: string, to: string) => {
+    const { data } = await supabase
+      .from("mood_submissions")
+      .select("*")
+      .gte("submission_date", from)
+      .lte("submission_date", to)
+      .order("created_at", { ascending: false });
+    setRangeSubs(((data ?? []) as DbRow[]).map(rowToSubmission));
+  }, []);
+
+  useEffect(() => {
+    if (activeFilter) fetchRange(activeFilter.from, activeFilter.to);
+  }, [activeFilter, fetchRange]);
+
+  // Submissions visible in dashboard (filtered range OR today)
+  const dashSubs = activeFilter ? rangeSubs : submissions;
 
   const totalSubmissions = submissions.length;
   const averageMoodScore =
@@ -282,6 +319,12 @@ function App() {
       : "0";
 
   const periodCounts = (() => {
+    // When a custom date range filter is active, count directly from rangeSubs
+    if (activeFilter) {
+      const c: MoodCounts = {};
+      for (const s of rangeSubs) c[s.mood] = (c[s.mood] ?? 0) + 1;
+      return c;
+    }
     const now = new Date();
     const todayC: MoodCounts = {};
     for (const s of submissions) todayC[s.mood] = (todayC[s.mood] ?? 0) + 1;
@@ -310,6 +353,20 @@ function App() {
   const getPeriodPercentage = (moodId: MoodId) =>
     periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
   const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
+
+  // Tag frequency for word cloud (uses current dashboard set)
+  const tagCounts = (() => {
+    const c: Record<string, number> = {};
+    for (const s of dashSubs) for (const t of s.tags) c[t] = (c[t] ?? 0) + 1;
+    return c;
+  })();
+  const tagMax = Math.max(1, ...Object.values(tagCounts));
+  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+
+  const formatBR = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
 
   const moodBarColor = (id: MoodId) =>
     id === "stressed"
@@ -461,6 +518,32 @@ function App() {
                     placeholder="Ex: Tivemos uma ótima entrega de sprint e o time resolveu os gargalos técnicos rapidamente!"
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder:text-slate-400 text-sm"
                   />
+                  <p className="text-[11px] text-slate-500 mt-3 mb-2 font-semibold uppercase tracking-wider">
+                    Ou marque um motivo rápido:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TAGS.map((tag) => {
+                      const active = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                            )
+                          }
+                          className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all cursor-pointer ${
+                            active
+                              ? "bg-emerald-500 text-[#0a1d37] border-emerald-600 shadow"
+                              : "bg-white text-slate-600 border-slate-300 hover:border-emerald-400 hover:text-emerald-700"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-100">
@@ -612,26 +695,102 @@ function App() {
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm flex items-center gap-2">
-                  <span>📊</span> Distribuição de humor {distPeriod === "day" ? "hoje" : distPeriod === "week" ? "(últimos 7 dias)" : "(este mês)"}
+                  <span>📊</span> Distribuição de humor{" "}
+                  {activeFilter
+                    ? `(${formatBR(activeFilter.from)} → ${formatBR(activeFilter.to)})`
+                    : distPeriod === "day"
+                    ? "hoje"
+                    : distPeriod === "week"
+                    ? "(últimos 7 dias)"
+                    : "(este mês)"}
                 </h3>
-                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
-                  {([
-                    { id: "day", label: "Diário" },
-                    { id: "week", label: "Semanal" },
-                    { id: "month", label: "Mensal" },
-                  ] as const).map((p) => (
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                  <div className="relative">
                     <button
-                      key={p.id}
-                      onClick={() => setDistPeriod(p.id)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
-                        distPeriod === p.id
-                          ? "bg-[#0a1d37] text-emerald-400 shadow"
-                          : "text-slate-500 hover:text-[#0a1d37]"
+                      type="button"
+                      onClick={() => setFilterOpen((o) => !o)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider border transition-all cursor-pointer ${
+                        activeFilter
+                          ? "bg-emerald-500 text-[#0a1d37] border-emerald-600"
+                          : "bg-white text-[#0a1d37] border-slate-300 hover:border-emerald-400"
                       }`}
                     >
-                      {p.label}
+                      📅 Filtrar por período
                     </button>
-                  ))}
+                    {filterOpen && (
+                      <div className="absolute right-0 mt-2 z-30 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-4">
+                        <p className="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-3">
+                          Selecione duas datas
+                        </p>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">De</label>
+                        <input
+                          type="date"
+                          value={filterFrom}
+                          onChange={(e) => setFilterFrom(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">Até</label>
+                        <input
+                          type="date"
+                          value={filterTo}
+                          onChange={(e) => setFilterTo(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!filterFrom || !filterTo) {
+                                showAlert("warning", "Selecione as duas datas!");
+                                return;
+                              }
+                              const from = filterFrom <= filterTo ? filterFrom : filterTo;
+                              const to = filterFrom <= filterTo ? filterTo : filterFrom;
+                              setActiveFilter({ from, to });
+                              setFilterOpen(false);
+                            }}
+                            className="flex-1 bg-[#0a1d37] text-white text-xs font-extrabold uppercase tracking-wider py-2 rounded-lg hover:bg-[#0f2c52] cursor-pointer"
+                          >
+                            Aplicar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveFilter(null);
+                              setRangeSubs([]);
+                              setFilterFrom("");
+                              setFilterTo("");
+                              setFilterOpen(false);
+                            }}
+                            className="flex-1 border border-slate-300 text-slate-600 text-xs font-extrabold uppercase tracking-wider py-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {!activeFilter && (
+                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                      {([
+                        { id: "day", label: "Diário" },
+                        { id: "week", label: "Semanal" },
+                        { id: "month", label: "Mensal" },
+                      ] as const).map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setDistPeriod(p.id)}
+                          className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                            distPeriod === p.id
+                              ? "bg-[#0a1d37] text-emerald-400 shadow"
+                              : "text-slate-500 hover:text-[#0a1d37]"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -689,15 +848,57 @@ function App() {
               </div>
             </div>
 
+            <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+              <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center gap-2">
+                <span>☁️</span> Nuvem de tags{" "}
+                <span className="text-[10px] text-slate-400 font-bold normal-case">
+                  · principais motivos no período
+                </span>
+              </h3>
+              {sortedTags.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">
+                  Nenhuma tag registrada no período selecionado.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {sortedTags.map(([tag, count]) => {
+                    const scale = 0.85 + (count / tagMax) * 1.4;
+                    return (
+                      <span
+                        key={tag}
+                        title={`${count} ocorrência${count > 1 ? "s" : ""}`}
+                        className="font-extrabold text-[#0a1d37] hover:text-emerald-600 transition-colors cursor-default"
+                        style={{ fontSize: `${scale}rem`, lineHeight: 1.2 }}
+                      >
+                        {tag}
+                        <span className="text-[10px] font-bold text-slate-400 ml-1 align-top">
+                          {count}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 gap-8">
               <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
 
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
-                  <span className="flex items-center gap-2">⏱️ Últimos registros efetuados</span>
-                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">Sincronizado em tempo real</span>
+                  <span className="flex items-center gap-2">
+                    ⏱️ Últimos registros efetuados
+                    {activeFilter && (
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded normal-case">
+                        {formatBR(activeFilter.from)} → {formatBR(activeFilter.to)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">
+                    {activeFilter ? "Filtrado por período" : "Sincronizado em tempo real"}
+                  </span>
                 </h3>
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 flex-1">
-                  {submissions.map((sub) => {
+                  {dashSubs.map((sub) => {
                     const moodObj = MOODS.find((m) => m.id === sub.mood) || MOODS[2];
                     return (
                       <div key={sub.id} className="p-4 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl flex gap-3 transition-all">
@@ -712,15 +913,33 @@ function App() {
                                 {sub.employeeId}
                               </span>
                             </div>
-                            <span className="text-[11px] text-slate-400 font-medium">{sub.timestamp}</span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {activeFilter ? formatBR(sub.submissionDate) : sub.timestamp}
+                            </span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium mt-1 italic">"{sub.comment}"</p>
+                          {sub.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {sub.tags.map((t) => (
+                                <span
+                                  key={t}
+                                  className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                  {submissions.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">Nenhum registro efetuado hoje.</div>
+                  {dashSubs.length === 0 && (
+                    <div className="text-center py-12 text-slate-400 text-sm">
+                      {activeFilter
+                        ? "Nenhum registro encontrado nesse período."
+                        : "Nenhum registro efetuado hoje."}
+                    </div>
                   )}
                 </div>
               </div>
