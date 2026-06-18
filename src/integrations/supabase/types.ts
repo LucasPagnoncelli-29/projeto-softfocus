@@ -24,6 +24,7 @@ export type Database = {
           mood: string
           score: number
           submission_date: string
+          tags: string[]
         }
         Insert: {
           comment?: string | null
@@ -34,6 +35,7 @@ export type Database = {
           mood: string
           score: number
           submission_date?: string
+          tags?: string[]
         }
         Update: {
           comment?: string | null
@@ -44,6 +46,7 @@ export type Database = {
           mood?: string
           score?: number
           submission_date?: string
+          tags?: string[]
         }
         Relationships: []
       }
