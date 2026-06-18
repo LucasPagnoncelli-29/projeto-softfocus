@@ -695,26 +695,102 @@ function App() {
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm flex items-center gap-2">
-                  <span>📊</span> Distribuição de humor {distPeriod === "day" ? "hoje" : distPeriod === "week" ? "(últimos 7 dias)" : "(este mês)"}
+                  <span>📊</span> Distribuição de humor{" "}
+                  {activeFilter
+                    ? `(${formatBR(activeFilter.from)} → ${formatBR(activeFilter.to)})`
+                    : distPeriod === "day"
+                    ? "hoje"
+                    : distPeriod === "week"
+                    ? "(últimos 7 dias)"
+                    : "(este mês)"}
                 </h3>
-                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
-                  {([
-                    { id: "day", label: "Diário" },
-                    { id: "week", label: "Semanal" },
-                    { id: "month", label: "Mensal" },
-                  ] as const).map((p) => (
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                  <div className="relative">
                     <button
-                      key={p.id}
-                      onClick={() => setDistPeriod(p.id)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
-                        distPeriod === p.id
-                          ? "bg-[#0a1d37] text-emerald-400 shadow"
-                          : "text-slate-500 hover:text-[#0a1d37]"
+                      type="button"
+                      onClick={() => setFilterOpen((o) => !o)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider border transition-all cursor-pointer ${
+                        activeFilter
+                          ? "bg-emerald-500 text-[#0a1d37] border-emerald-600"
+                          : "bg-white text-[#0a1d37] border-slate-300 hover:border-emerald-400"
                       }`}
                     >
-                      {p.label}
+                      📅 Filtrar por período
                     </button>
-                  ))}
+                    {filterOpen && (
+                      <div className="absolute right-0 mt-2 z-30 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-4">
+                        <p className="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-3">
+                          Selecione duas datas
+                        </p>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">De</label>
+                        <input
+                          type="date"
+                          value={filterFrom}
+                          onChange={(e) => setFilterFrom(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">Até</label>
+                        <input
+                          type="date"
+                          value={filterTo}
+                          onChange={(e) => setFilterTo(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!filterFrom || !filterTo) {
+                                showAlert("warning", "Selecione as duas datas!");
+                                return;
+                              }
+                              const from = filterFrom <= filterTo ? filterFrom : filterTo;
+                              const to = filterFrom <= filterTo ? filterTo : filterFrom;
+                              setActiveFilter({ from, to });
+                              setFilterOpen(false);
+                            }}
+                            className="flex-1 bg-[#0a1d37] text-white text-xs font-extrabold uppercase tracking-wider py-2 rounded-lg hover:bg-[#0f2c52] cursor-pointer"
+                          >
+                            Aplicar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveFilter(null);
+                              setRangeSubs([]);
+                              setFilterFrom("");
+                              setFilterTo("");
+                              setFilterOpen(false);
+                            }}
+                            className="flex-1 border border-slate-300 text-slate-600 text-xs font-extrabold uppercase tracking-wider py-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {!activeFilter && (
+                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                      {([
+                        { id: "day", label: "Diário" },
+                        { id: "week", label: "Semanal" },
+                        { id: "month", label: "Mensal" },
+                      ] as const).map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setDistPeriod(p.id)}
+                          className={`px-3 py-1.5 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                            distPeriod === p.id
+                              ? "bg-[#0a1d37] text-emerald-400 shadow"
+                              : "text-slate-500 hover:text-[#0a1d37]"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
