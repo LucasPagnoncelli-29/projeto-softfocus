@@ -727,14 +727,14 @@ function App() {
                           type="date"
                           value={filterFrom}
                           onChange={(e) => setFilterFrom(e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 mb-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                         <label className="block text-[11px] font-bold text-slate-500 mb-1">Até</label>
                         <input
                           type="date"
                           value={filterTo}
                           onChange={(e) => setFilterTo(e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                         <div className="flex gap-2">
                           <button
