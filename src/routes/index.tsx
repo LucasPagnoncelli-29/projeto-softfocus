@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
+import type { Session } from "@supabase/supabase-js";
 import softfocusLogo from "@/assets/softfocus-logo.webp.asset.json";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -61,7 +62,6 @@ type MoodCounts = Record<string, number>;
 interface ArchiveDay { date: string; counts: MoodCounts }
 
 function todayKey() {
-  // Use São Paulo locale to match DB default (America/Sao_Paulo)
   const d = new Date();
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -69,7 +69,7 @@ function todayKey() {
     month: "2-digit",
     day: "2-digit",
   });
-  return fmt.format(d); // YYYY-MM-DD
+  return fmt.format(d);
 }
 
 function formatTimestamp(iso: string): string {
@@ -128,9 +128,6 @@ function App() {
   const [distPeriod, setDistPeriod] = useState<"day" | "week" | "month">("day");
   const [submitting, setSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
-  const [ceoAuth, setCeoAuth] = useState(false);
-  const [ceoUser, setCeoUser] = useState("");
-  const [ceoPass, setCeoPass] = useState("");
   const [currentDay, setCurrentDay] = useState<string>(todayKey());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterFrom, setFilterFrom] = useState<string>("");
@@ -138,8 +135,56 @@ function App() {
   const [activeFilter, setActiveFilter] = useState<{ from: string; to: string } | null>(null);
   const [rangeSubs, setRangeSubs] = useState<Submission[]>([]);
 
-  // Load today's submissions + archive (last 31 days excluding today)
+  // ---- Auth state ----
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isCeo, setIsCeo] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPass, setAuthPass] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const showAlert = useCallback((type: AlertState["type"], message: string) => {
+    setAlert({ show: true, type, message });
+    setTimeout(() => setAlert({ show: false, type: "", message: "" }), 5000);
+  }, []);
+
+  // Subscribe to auth state
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Check CEO role whenever the session changes
+  useEffect(() => {
+    if (!session) {
+      setIsCeo(false);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .eq("role", "ceo")
+        .maybeSingle();
+      setIsCeo(!!data);
+    })();
+  }, [session]);
+
+  // Load submissions (CEO: all; employee: own)
   const refreshAll = useCallback(async () => {
+    if (!session) {
+      setSubmissions([]);
+      setArchive([]);
+      return;
+    }
     const today = todayKey();
     setCurrentDay(today);
 
@@ -151,7 +196,6 @@ function App() {
 
     setSubmissions(((todayRows ?? []) as DbRow[]).map(rowToSubmission));
 
-    // Archive: last 31 days, excluding today
     const start = new Date();
     start.setDate(start.getDate() - 31);
     const startStr = start.toISOString().slice(0, 10);
@@ -168,67 +212,72 @@ function App() {
       map[r.submission_date][r.mood] = (map[r.submission_date][r.mood] ?? 0) + 1;
     }
     setArchive(Object.entries(map).map(([date, counts]) => ({ date, counts })));
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
 
-  // Realtime: any insert updates the dashboard live
-  useEffect(() => {
-    const channel = supabase
-      .channel("mood_submissions_changes")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "mood_submissions" },
-        (payload) => {
-          const row = payload.new as DbRow;
-          if (row.submission_date === todayKey()) {
-            setSubmissions((prev) =>
-              prev.some((s) => s.id === row.id) ? prev : [rowToSubmission(row), ...prev]
-            );
-          } else {
-            refreshAll();
-          }
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [refreshAll]);
-
-  // Detect midnight rollover (any device)
+  // Midnight rollover
   useEffect(() => {
     const id = setInterval(() => {
       const t = todayKey();
-      if (t !== currentDay) {
-        refreshAll();
-      }
+      if (t !== currentDay) refreshAll();
     }, 60_000);
     return () => clearInterval(id);
   }, [currentDay, refreshAll]);
 
-  const showAlert = (type: AlertState["type"], message: string) => {
-    setAlert({ show: true, type, message });
-    setTimeout(() => setAlert({ show: false, type: "", message: "" }), 5000);
+  // ---- Auth handlers ----
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authBusy) return;
+    if (!authEmail.trim() || !authPass) {
+      showAlert("warning", "Informe e-mail e senha.");
+      return;
+    }
+    setAuthBusy(true);
+    if (authMode === "signup") {
+      const { error } = await supabase.auth.signUp({
+        email: authEmail.trim(),
+        password: authPass,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      setAuthBusy(false);
+      if (error) {
+        showAlert("error", error.message);
+        return;
+      }
+      showAlert("success", "Conta criada! Você já pode entrar.");
+      setAuthMode("signin");
+      setAuthPass("");
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPass,
+    });
+    setAuthBusy(false);
+    if (error) {
+      showAlert("error", "Credenciais inválidas.");
+      return;
+    }
+    showAlert("success", "Acesso autorizado!");
+    setAuthEmail("");
+    setAuthPass("");
   };
 
-  const handleCeoLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (ceoUser.trim().toLowerCase() === "ceo" && ceoPass === "ceo123") {
-      setCeoAuth(true);
-      setCeoUser("");
-      setCeoPass("");
-      showAlert("success", " ACESSO AUTORIZADO! ");
-    } else {
-      showAlert("error", " CREDENCIAIS INVÁLIDAS! ");
-    }
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setActiveTab("register");
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+    if (!session) {
+      showAlert("warning", "Faça login antes de registrar.");
+      return;
+    }
     if (!selectedMood) {
       showAlert("warning", "Por favor, selecione como você está se sentindo hoje primeiro!");
       return;
@@ -248,11 +297,11 @@ function App() {
     setSubmitting(true);
     const today = todayKey();
 
-    // Pre-check: same employee, same day
+    // Pre-check: same user, same day
     const { data: existing } = await supabase
       .from("mood_submissions")
       .select("id")
-      .eq("employee_id", employee.id)
+      .eq("user_id", session.user.id)
       .eq("submission_date", today)
       .maybeSingle();
 
@@ -264,6 +313,7 @@ function App() {
 
     const moodObj = MOODS.find((m) => m.id === selectedMood)!;
     const { error } = await supabase.from("mood_submissions").insert({
+      user_id: session.user.id,
       employee_id: employee.id,
       employee_name: employee.name,
       mood: selectedMood,
@@ -276,7 +326,6 @@ function App() {
     setSubmitting(false);
 
     if (error) {
-      // Unique violation code from Postgres
       if (error.code === "23505") {
         showAlert("warning", "Você já se registrou hoje!");
         return;
@@ -285,16 +334,14 @@ function App() {
       return;
     }
 
-    showAlert("success", " HUMOR REGISTADO COM SUCESSO! ");
+    showAlert("success", " HUMOR REGISTRADO COM SUCESSO! ");
     setSelectedMood(null);
     setComment("");
     setSelectedTags([]);
     setEmployeeId("");
-    // Realtime will append; refreshAll as a safety net
     refreshAll();
   };
 
-  // Fetch submissions for a custom date range
   const fetchRange = useCallback(async (from: string, to: string) => {
     const { data } = await supabase
       .from("mood_submissions")
@@ -309,7 +356,6 @@ function App() {
     if (activeFilter) fetchRange(activeFilter.from, activeFilter.to);
   }, [activeFilter, fetchRange]);
 
-  // Submissions visible in dashboard (filtered range OR today)
   const dashSubs = activeFilter ? rangeSubs : submissions;
 
   const totalSubmissions = submissions.length;
@@ -319,7 +365,6 @@ function App() {
       : "0";
 
   const periodCounts = (() => {
-    // When a custom date range filter is active, count directly from rangeSubs
     if (activeFilter) {
       const c: MoodCounts = {};
       for (const s of rangeSubs) c[s.mood] = (c[s.mood] ?? 0) + 1;
@@ -354,7 +399,6 @@ function App() {
     periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
   const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
 
-  // Tag frequency for word cloud (uses current dashboard set)
   const tagCounts = (() => {
     const c: Record<string, number> = {};
     for (const s of dashSubs) for (const t of s.tags) c[t] = (c[t] ?? 0) + 1;
@@ -396,37 +440,43 @@ function App() {
             </div>
           </div>
 
-          <div className="flex bg-slate-800/60 p-1 rounded-xl border border-slate-700/50">
-            <button
-              onClick={() => setActiveTab("register")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                activeTab === "register"
-                  ? "bg-emerald-500 text-[#0a1d37] shadow-md"
-                  : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Registrar Humor
-            </button>
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                activeTab === "dashboard"
-                  ? "bg-emerald-500 text-[#0a1d37] shadow-md"
-                  : "text-slate-300 hover:text-white hover:bg-slate-700/50"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
-              </svg>
-              CEO Dashboard
-            </button>
-          </div>
+          {session && (
+            <div className="flex items-center gap-3">
+              <div className="flex bg-slate-800/60 p-1 rounded-xl border border-slate-700/50">
+                <button
+                  onClick={() => setActiveTab("register")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                    activeTab === "register"
+                      ? "bg-emerald-500 text-[#0a1d37] shadow-md"
+                      : "text-slate-300 hover:text-white hover:bg-slate-700/50"
+                  }`}
+                >
+                  Registrar Humor
+                </button>
+                {isCeo && (
+                  <button
+                    onClick={() => setActiveTab("dashboard")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                      activeTab === "dashboard"
+                        ? "bg-emerald-500 text-[#0a1d37] shadow-md"
+                        : "text-slate-300 hover:text-white hover:bg-slate-700/50"
+                    }`}
+                  >
+                    CEO Dashboard
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="text-xs font-extrabold uppercase tracking-wider px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-700/50 transition-all cursor-pointer"
+                title={session.user.email ?? ""}
+              >
+                Sair
+              </button>
+            </div>
+          )}
         </div>
       </header>
-
 
       {alert.show && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4 animate-bounce">
@@ -439,30 +489,71 @@ function App() {
                 : "bg-amber-500 text-white border-amber-400"
             }`}
           >
-            <div className="bg-white/20 p-2 rounded-full">
-              {alert.type === "success" && (
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-              {alert.type === "error" && (
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              )}
-              {alert.type === "warning" && (
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              )}
-            </div>
             <div className="font-extrabold text-base tracking-wide flex-1 text-center">{alert.message}</div>
           </div>
         </div>
       )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {activeTab === "register" && (
+        {/* AUTH GATE */}
+        {!session && !authLoading && (
+          <div className="max-w-md mx-auto mt-8">
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+              <div className="bg-[#0a1d37] p-6 text-white border-b-2 border-emerald-500 text-center">
+                <h2 className="text-lg font-extrabold uppercase tracking-wider">
+                  {authMode === "signin" ? "Entrar" : "Criar conta"}
+                </h2>
+                <p className="text-xs text-slate-300 mt-1">
+                  Acesso restrito a colaboradores da Softfocus.
+                </p>
+              </div>
+              <form onSubmit={handleAuth} className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">E-mail corporativo</label>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="nome@softfocus.com.br"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">Senha</label>
+                  <input
+                    type="password"
+                    value={authPass}
+                    onChange={(e) => setAuthPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+                    minLength={6}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={authBusy}
+                  className="w-full py-3 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg border-b-4 border-emerald-500 transition-all cursor-pointer disabled:opacity-60"
+                >
+                  {authBusy ? "Aguarde..." : authMode === "signin" ? "Entrar" : "Criar conta"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode(authMode === "signin" ? "signup" : "signin")}
+                  className="w-full text-xs text-slate-500 hover:text-[#0a1d37] font-semibold cursor-pointer"
+                >
+                  {authMode === "signin"
+                    ? "Não tem conta? Criar agora"
+                    : "Já tem conta? Entrar"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* REGISTER TAB */}
+        {session && activeTab === "register" && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
               <div className="bg-[#0a1d37] p-6 text-white border-b-2 border-emerald-500">
@@ -508,15 +599,12 @@ function App() {
                     <span className="bg-emerald-500 text-[#0a1d37] text-xs font-extrabold w-5 h-5 rounded-full inline-flex items-center justify-center">2</span>
                     Conte um pouco mais sobre seu dia (opcional)
                   </label>
-                  <p className="text-xs text-slate-400 mb-2">
-                    Pode ser um agradecimento, um impedimento ou o que motivou sua escolha hoje.
-                  </p>
                   <textarea
                     rows={3}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    placeholder="Ex: Tivemos uma ótima entrega de sprint e o time resolveu os gargalos técnicos rapidamente!"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder:text-slate-400 text-sm"
+                    placeholder="Ex: Tivemos uma ótima entrega de sprint!"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                   />
                   <p className="text-[11px] text-slate-500 mt-3 mb-2 font-semibold uppercase tracking-wider">
                     Ou marque um motivo rápido:
@@ -553,31 +641,23 @@ function App() {
                       Confirme seu ID de colaborador
                     </label>
                     <p className="text-xs text-slate-500 mb-3">
-                      Informe o identificador único de crachá (SF-XXXX) presente em seu cartão da empresa.
+                      Informe o identificador único de crachá (SF-XXXX).
                     </p>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-slate-400 font-mono font-semibold text-sm">ID:</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={employeeId}
-                        onChange={(e) => setEmployeeId(e.target.value)}
-                        placeholder="SF-XXXX"
-                        className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-3 text-slate-800 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0a1d37] focus:border-transparent transition-all uppercase placeholder:text-slate-300"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
+                      placeholder="SF-XXXX"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#0a1d37] uppercase"
+                    />
                   </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-4 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg hover:shadow-xl active:scale-[0.99] transition-all flex items-center justify-center gap-2 border-b-4 border-emerald-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full py-4 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg border-b-4 border-emerald-500 cursor-pointer disabled:opacity-60"
                 >
-                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
                   {submitting ? "Registrando..." : "Registrar meu humor agora"}
                 </button>
               </form>
@@ -585,70 +665,27 @@ function App() {
           </div>
         )}
 
-        {activeTab === "dashboard" && !ceoAuth && (
-          <div className="max-w-md mx-auto mt-8">
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-              <div className="bg-[#0a1d37] p-6 text-white border-b-2 border-emerald-500 text-center">
-                <div className="inline-flex w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 items-center justify-center mb-3">
-                  <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3zm-7 9a7 7 0 1114 0H5z" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-extrabold uppercase tracking-wider">Acesso Restrito - CEO</h2>
-                <p className="text-xs text-slate-300 mt-1">Informe suas credenciais executivas para continuar.</p>
-              </div>
-              <form onSubmit={handleCeoLogin} className="p-6 space-y-5">
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">ID do CEO</label>
-                  <input
-                    type="text"
-                    value={ceoUser}
-                    onChange={(e) => setCeoUser(e.target.value)}
-                    placeholder="Digite seu usuário"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">Senha</label>
-                  <input
-                    type="password"
-                    value={ceoPass}
-                    onChange={(e) => setCeoPass(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-[#0a1d37] hover:bg-[#0f2c52] text-white rounded-xl font-extrabold uppercase tracking-widest text-sm shadow-lg border-b-4 border-emerald-500 transition-all cursor-pointer"
-                >
-                  Entrar no painel
-                </button>
-                <p className="text-[11px] text-center text-slate-400">
-                  Demo: <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">ceo</code> / <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">ceo123</code>
-                </p>
-              </form>
-            </div>
+        {/* DASHBOARD - CEO only */}
+        {session && activeTab === "dashboard" && !isCeo && (
+          <div className="max-w-md mx-auto mt-8 bg-white p-6 rounded-2xl shadow border border-slate-200 text-center">
+            <p className="text-sm font-bold text-slate-700">
+              Esta área é restrita ao CEO. Sua conta não possui essa permissão.
+            </p>
           </div>
         )}
 
-        {activeTab === "dashboard" && ceoAuth && (
+        {session && activeTab === "dashboard" && isCeo && (
           <div className="space-y-8">
             <div className="bg-white p-4 rounded-2xl shadow border border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 <div>
                   <p className="text-xs uppercase font-extrabold tracking-wider text-slate-500">Sessão Executiva</p>
-                  <p className="text-sm font-bold text-[#0a1d37]">CEO autenticado · Painel da Diretoria</p>
+                  <p className="text-sm font-bold text-[#0a1d37]">CEO autenticado · {session.user.email}</p>
                 </div>
               </div>
-              <button
-                onClick={() => { setCeoAuth(false); setActiveTab("register"); }}
-                className="text-xs font-extrabold uppercase tracking-wider px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-              >
-                Sair (Logout)
-              </button>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-emerald-500 flex items-center justify-between">
                 <div>
@@ -883,7 +920,6 @@ function App() {
 
             <div className="grid grid-cols-1 gap-8">
               <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 flex flex-col">
-
                 <h3 className="font-extrabold text-[#0a1d37] uppercase tracking-wider text-sm mb-4 flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     ⏱️ Últimos registros efetuados
@@ -894,7 +930,7 @@ function App() {
                     )}
                   </span>
                   <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">
-                    {activeFilter ? "Filtrado por período" : "Sincronizado em tempo real"}
+                    {activeFilter ? "Filtrado por período" : "Atualizado ao recarregar"}
                   </span>
                 </h3>
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 flex-1">
@@ -992,12 +1028,6 @@ function App() {
             <p className="font-bold text-white text-sm">Softfocus Soluções Tecnológicas Ltda.</p>
             <p>Parque Tecnológico de Pato Branco • Rua Lídio Oltramari, 1628 - Bloco 1C</p>
             <p>Pato Branco - PR • CEP 85503-381</p>
-          </div>
-          <div className="flex flex-wrap gap-4 items-center justify-center">
-            <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700 text-center">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400">CNPJ</p>
-              <p className="font-mono text-white font-bold text-xs">04.962.314/0001-08</p>
-            </div>
           </div>
         </div>
       </footer>
