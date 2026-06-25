@@ -980,6 +980,7 @@ function App() {
                   : "Mensal"}) — {dashSubs.length} registro{dashSubs.length === 1 ? "" : "s"}
               </span>
             </button>
+          </div>
         )}
       </main>
 
