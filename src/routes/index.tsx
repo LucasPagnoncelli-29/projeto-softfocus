@@ -856,8 +856,8 @@ function App() {
                                 {sub.employeeId}
                               </span>
                             </div>
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              {activeFilter ? formatBR(sub.submissionDate) : sub.timestamp}
+                            <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
+                              {formatBR(sub.submissionDate)} • {sub.timestamp}
                             </span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium mt-1 italic">"{sub.comment}"</p>
@@ -925,6 +925,61 @@ function App() {
                 ))}
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                const periodLabel = activeFilter
+                  ? `${formatBR(activeFilter.from)} a ${formatBR(activeFilter.to)}`
+                  : distPeriod === "day"
+                  ? "Diário"
+                  : distPeriod === "week"
+                  ? "Semanal"
+                  : "Mensal";
+                const header = ["Data", "Horário", "ID", "Nome", "Humor", "Score", "Tags", "Comentário"];
+                const escape = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                const rows = dashSubs.map((s) => {
+                  const moodObj = MOODS.find((m) => m.id === s.mood) || MOODS[2];
+                  return [
+                    formatBR(s.submissionDate),
+                    s.timestamp,
+                    s.employeeId,
+                    s.name,
+                    moodObj.label,
+                    String(s.score),
+                    s.tags.join(" "),
+                    s.comment,
+                  ].map(escape).join(",");
+                });
+                const csv = [
+                  `Relatório Softfocus - Período: ${periodLabel}`,
+                  `Total de registros: ${dashSubs.length}`,
+                  "",
+                  header.map(escape).join(","),
+                  ...rows,
+                ].join("\n");
+                const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `relatorio-softfocus-${periodLabel.replace(/\s+/g, "_")}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg border border-emerald-700 flex items-center justify-center gap-3 transition-all hover:shadow-xl"
+            >
+              <span className="text-xl" aria-hidden>📥</span>
+              <span className="uppercase tracking-wider text-sm">
+                Exportar relatório ({activeFilter
+                  ? `${formatBR(activeFilter.from)} → ${formatBR(activeFilter.to)}`
+                  : distPeriod === "day"
+                  ? "Diário"
+                  : distPeriod === "week"
+                  ? "Semanal"
+                  : "Mensal"}) — {dashSubs.length} registro{dashSubs.length === 1 ? "" : "s"}
+              </span>
+            </button>
           </div>
         )}
       </main>
