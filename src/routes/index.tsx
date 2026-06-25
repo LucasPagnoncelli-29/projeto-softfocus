@@ -700,8 +700,8 @@ function App() {
                             type="button"
                             onClick={() => {
                               setActiveFilter(null);
-                              setRangeSubs([]);
                               setFilterFrom("");
+
                               setFilterTo("");
                               setFilterOpen(false);
                             }}
