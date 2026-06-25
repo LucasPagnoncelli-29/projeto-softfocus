@@ -123,8 +123,7 @@ function App() {
   const [comment, setComment] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [employeeId, setEmployeeId] = useState("");
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [archive, setArchive] = useState<ArchiveDay[]>([]);
+  const [dashSubs, setDashSubs] = useState<Submission[]>([]);
   const [distPeriod, setDistPeriod] = useState<"day" | "week" | "month">("day");
   const [submitting, setSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ show: false, type: "", message: "" });
@@ -136,45 +135,42 @@ function App() {
   const [filterFrom, setFilterFrom] = useState<string>("");
   const [filterTo, setFilterTo] = useState<string>("");
   const [activeFilter, setActiveFilter] = useState<{ from: string; to: string } | null>(null);
-  const [rangeSubs, setRangeSubs] = useState<Submission[]>([]);
 
-  // Load today's submissions + archive (last 31 days excluding today)
-  const refreshAll = useCallback(async () => {
-    const today = todayKey();
-    setCurrentDay(today);
+  // Effective range = custom filter OR distPeriod tab
+  const effectiveRange = (() => {
+    if (activeFilter) return activeFilter;
+    const today = currentDay;
+    if (distPeriod === "day") return { from: today, to: today };
+    const [y, m, d] = today.split("-").map(Number);
+    const todayDate = new Date(y, (m ?? 1) - 1, d ?? 1);
+    const fmt = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    if (distPeriod === "week") {
+      const s = new Date(todayDate);
+      s.setDate(todayDate.getDate() - 6);
+      return { from: fmt(s), to: today };
+    }
+    const s = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    return { from: fmt(s), to: today };
+  })();
+  const rangeFrom = effectiveRange.from;
+  const rangeTo = effectiveRange.to;
 
-    const { data: todayRows } = await supabase
+  const fetchDash = useCallback(async (from: string, to: string) => {
+    const { data } = await supabase
       .from("mood_submissions")
       .select("*")
-      .eq("submission_date", today)
+      .gte("submission_date", from)
+      .lte("submission_date", to)
       .order("created_at", { ascending: false });
-
-    setSubmissions(((todayRows ?? []) as DbRow[]).map(rowToSubmission));
-
-    // Archive: last 31 days, excluding today
-    const start = new Date();
-    start.setDate(start.getDate() - 31);
-    const startStr = start.toISOString().slice(0, 10);
-
-    const { data: archRows } = await supabase
-      .from("mood_submissions")
-      .select("mood, submission_date")
-      .gte("submission_date", startStr)
-      .lt("submission_date", today);
-
-    const map: Record<string, MoodCounts> = {};
-    for (const r of (archRows ?? []) as { mood: string; submission_date: string }[]) {
-      if (!map[r.submission_date]) map[r.submission_date] = {};
-      map[r.submission_date][r.mood] = (map[r.submission_date][r.mood] ?? 0) + 1;
-    }
-    setArchive(Object.entries(map).map(([date, counts]) => ({ date, counts })));
+    setDashSubs(((data ?? []) as DbRow[]).map(rowToSubmission));
   }, []);
 
   useEffect(() => {
-    refreshAll();
-  }, [refreshAll]);
+    fetchDash(rangeFrom, rangeTo);
+  }, [rangeFrom, rangeTo, fetchDash]);
 
-  // Realtime: any insert updates the dashboard live
+  // Realtime: append inserts that fall within the active range
   useEffect(() => {
     const channel = supabase
       .channel("mood_submissions_changes")
@@ -183,12 +179,10 @@ function App() {
         { event: "INSERT", schema: "public", table: "mood_submissions" },
         (payload) => {
           const row = payload.new as DbRow;
-          if (row.submission_date === todayKey()) {
-            setSubmissions((prev) =>
+          if (row.submission_date >= rangeFrom && row.submission_date <= rangeTo) {
+            setDashSubs((prev) =>
               prev.some((s) => s.id === row.id) ? prev : [rowToSubmission(row), ...prev]
             );
-          } else {
-            refreshAll();
           }
         }
       )
@@ -196,18 +190,16 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshAll]);
+  }, [rangeFrom, rangeTo]);
 
-  // Detect midnight rollover (any device)
+  // Midnight rollover
   useEffect(() => {
     const id = setInterval(() => {
       const t = todayKey();
-      if (t !== currentDay) {
-        refreshAll();
-      }
+      if (t !== currentDay) setCurrentDay(t);
     }, 60_000);
     return () => clearInterval(id);
-  }, [currentDay, refreshAll]);
+  }, [currentDay]);
 
   const showAlert = (type: AlertState["type"], message: string) => {
     setAlert({ show: true, type, message });
@@ -248,7 +240,6 @@ function App() {
     setSubmitting(true);
     const today = todayKey();
 
-    // Pre-check: same employee, same day
     const { data: existing } = await supabase
       .from("mood_submissions")
       .select("id")
@@ -276,7 +267,6 @@ function App() {
     setSubmitting(false);
 
     if (error) {
-      // Unique violation code from Postgres
       if (error.code === "23505") {
         showAlert("warning", "Você já se registrou hoje!");
         return;
@@ -290,63 +280,22 @@ function App() {
     setComment("");
     setSelectedTags([]);
     setEmployeeId("");
-    // Realtime will append; refreshAll as a safety net
-    refreshAll();
+    fetchDash(rangeFrom, rangeTo);
   };
 
-  // Fetch submissions for a custom date range
-  const fetchRange = useCallback(async (from: string, to: string) => {
-    const { data } = await supabase
-      .from("mood_submissions")
-      .select("*")
-      .gte("submission_date", from)
-      .lte("submission_date", to)
-      .order("created_at", { ascending: false });
-    setRangeSubs(((data ?? []) as DbRow[]).map(rowToSubmission));
-  }, []);
-
-  useEffect(() => {
-    if (activeFilter) fetchRange(activeFilter.from, activeFilter.to);
-  }, [activeFilter, fetchRange]);
-
-  // Submissions visible in dashboard (filtered range OR today)
-  const dashSubs = activeFilter ? rangeSubs : submissions;
-
-  const totalSubmissions = submissions.length;
+  // KPIs derived from the same filtered set
+  const totalSubmissions = dashSubs.length;
   const averageMoodScore =
     totalSubmissions > 0
-      ? (submissions.reduce((acc, c) => acc + c.score, 0) / totalSubmissions).toFixed(1)
+      ? (dashSubs.reduce((acc, c) => acc + c.score, 0) / totalSubmissions).toFixed(1)
       : "0";
+  const uniqueEmployees = new Set(dashSubs.map((s) => s.employeeId)).size;
+  const adherenceRate = Math.round((uniqueEmployees / MOCK_EMPLOYEES.length) * 100);
 
-  const periodCounts = (() => {
-    // When a custom date range filter is active, count directly from rangeSubs
-    if (activeFilter) {
-      const c: MoodCounts = {};
-      for (const s of rangeSubs) c[s.mood] = (c[s.mood] ?? 0) + 1;
-      return c;
-    }
-    const now = new Date();
-    const todayC: MoodCounts = {};
-    for (const s of submissions) todayC[s.mood] = (todayC[s.mood] ?? 0) + 1;
-    if (distPeriod === "day") return todayC;
-    const startDate = new Date(now);
-    if (distPeriod === "week") {
-      startDate.setDate(now.getDate() - 6);
-    } else {
-      startDate.setDate(1);
-    }
-    startDate.setHours(0, 0, 0, 0);
-    const merged: MoodCounts = { ...todayC };
-    for (const day of archive) {
-      const [y, m, d] = day.date.split("-").map(Number);
-      const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
-      if (dt >= startDate && dt <= now && day.date !== todayKey()) {
-        for (const [k, v] of Object.entries(day.counts)) {
-          merged[k] = (merged[k] ?? 0) + v;
-        }
-      }
-    }
-    return merged;
+  const periodCounts: MoodCounts = (() => {
+    const c: MoodCounts = {};
+    for (const s of dashSubs) c[s.mood] = (c[s.mood] ?? 0) + 1;
+    return c;
   })();
 
   const periodTotal = Object.values(periodCounts).reduce((a, b) => a + b, 0);
@@ -354,7 +303,6 @@ function App() {
     periodTotal === 0 ? 0 : Math.round(((periodCounts[moodId] ?? 0) / periodTotal) * 100);
   const periodMax = Math.max(1, ...MOODS.map((m) => periodCounts[m.id] ?? 0));
 
-  // Tag frequency for word cloud (uses current dashboard set)
   const tagCounts = (() => {
     const c: Record<string, number> = {};
     for (const s of dashSubs) for (const t of s.tags) c[t] = (c[t] ?? 0) + 1;
@@ -362,6 +310,7 @@ function App() {
   })();
   const tagMax = Math.max(1, ...Object.values(tagCounts));
   const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+
 
   const formatBR = (iso: string) => {
     const [y, m, d] = iso.split("-");
