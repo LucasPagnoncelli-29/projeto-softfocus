@@ -620,14 +620,8 @@ function App() {
               <div className="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-teal-500 flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-xs uppercase font-extrabold tracking-wider">Taxa de adesão</p>
-                  <p className="text-3xl font-extrabold text-[#0a1d37] mt-1">
-                    {Math.round(
-                      (submissions.filter((v, i, a) => a.findIndex((t) => t.employeeId === v.employeeId) === i).length /
-                        MOCK_EMPLOYEES.length) *
-                        100
-                    )}
-                    %
-                  </p>
+                  <p className="text-3xl font-extrabold text-[#0a1d37] mt-1">{adherenceRate}%</p>
+
                 </div>
                 <div className="bg-teal-100 text-teal-700 p-3 rounded-xl text-xl">👥</div>
               </div>
