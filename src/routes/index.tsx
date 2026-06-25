@@ -1029,7 +1029,7 @@ ${rows.map((r) => `<tr><td>${esc(r.data)}</td><td>${esc(r.hora)}</td><td>${esc(r
 </body></html>`;
                 const win = window.open("", "_blank");
                 if (!win) {
-                  alert("Permita pop-ups para gerar o PDF.");
+                  window.alert("Permita pop-ups para gerar o PDF.");
                   return;
                 }
                 win.document.open();
