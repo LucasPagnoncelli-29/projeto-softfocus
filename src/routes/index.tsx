@@ -926,30 +926,38 @@ function App() {
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                const periodLabel = activeFilter
-                  ? `${formatBR(activeFilter.from)} a ${formatBR(activeFilter.to)}`
-                  : distPeriod === "day"
-                  ? "Diário"
-                  : distPeriod === "week"
-                  ? "Semanal"
-                  : "Mensal";
+            {(() => {
+              const periodLabel = activeFilter
+                ? `${formatBR(activeFilter.from)} a ${formatBR(activeFilter.to)}`
+                : distPeriod === "day"
+                ? "Diário"
+                : distPeriod === "week"
+                ? "Semanal"
+                : "Mensal";
+              const periodShort = activeFilter
+                ? `${formatBR(activeFilter.from)} → ${formatBR(activeFilter.to)}`
+                : periodLabel;
+              const buildRows = () =>
+                dashSubs.map((s) => {
+                  const moodObj = MOODS.find((m) => m.id === s.mood) || MOODS[2];
+                  return {
+                    data: formatBR(s.submissionDate),
+                    hora: s.timestamp,
+                    id: s.employeeId,
+                    nome: s.name,
+                    humor: moodObj.label,
+                    score: s.score,
+                    tags: s.tags.join(" "),
+                    comentario: s.comment,
+                  };
+                });
+
+              const exportCSV = () => {
                 const header = ["Data", "Horário", "ID", "Nome", "Humor", "Score", "Tags", "Comentário"];
                 const escape = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-                const rows = dashSubs.map((s) => {
-                  const moodObj = MOODS.find((m) => m.id === s.mood) || MOODS[2];
-                  return [
-                    formatBR(s.submissionDate),
-                    s.timestamp,
-                    s.employeeId,
-                    s.name,
-                    moodObj.label,
-                    String(s.score),
-                    s.tags.join(" "),
-                    s.comment,
-                  ].map(escape).join(",");
-                });
+                const rows = buildRows().map((r) =>
+                  [r.data, r.hora, r.id, r.nome, r.humor, String(r.score), r.tags, r.comentario].map(escape).join(","),
+                );
                 const csv = [
                   `Relatório Softfocus - Período: ${periodLabel}`,
                   `Total de registros: ${dashSubs.length}`,
@@ -966,20 +974,92 @@ function App() {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-              }}
-              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg border border-emerald-700 flex items-center justify-center gap-3 transition-all hover:shadow-xl"
-            >
-              <span className="text-xl" aria-hidden>📥</span>
-              <span className="uppercase tracking-wider text-sm">
-                Exportar relatório ({activeFilter
-                  ? `${formatBR(activeFilter.from)} → ${formatBR(activeFilter.to)}`
-                  : distPeriod === "day"
-                  ? "Diário"
-                  : distPeriod === "week"
-                  ? "Semanal"
-                  : "Mensal"}) — {dashSubs.length} registro{dashSubs.length === 1 ? "" : "s"}
-              </span>
-            </button>
+              };
+
+              const exportPDF = () => {
+                const rows = buildRows();
+                const esc = (s: string) =>
+                  String(s ?? "").replace(/[&<>"']/g, (c) =>
+                    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!),
+                  );
+                const moodCounts = MOODS.map((m) => ({
+                  label: m.label,
+                  count: dashSubs.filter((s) => s.mood === m.id).length,
+                }));
+                const avgScore = dashSubs.length
+                  ? (dashSubs.reduce((a, s) => a + s.score, 0) / dashSubs.length).toFixed(2)
+                  : "0";
+                const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+<title>Relatório Softfocus — ${esc(periodLabel)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:32px;font-size:12px}
+  h1{margin:0 0 4px;color:#0a1d37;font-size:22px}
+  h2{margin:24px 0 8px;color:#0a1d37;font-size:14px;border-bottom:2px solid #10b981;padding-bottom:4px}
+  .meta{color:#475569;font-size:11px;margin-bottom:8px}
+  .kpis{display:flex;gap:12px;margin:12px 0}
+  .kpi{flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#f8fafc}
+  .kpi b{display:block;font-size:18px;color:#0a1d37}
+  .kpi span{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;vertical-align:top}
+  th{background:#0a1d37;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  tr:nth-child(even) td{background:#f8fafc}
+  .footer{margin-top:24px;color:#64748b;font-size:10px;text-align:center;border-top:1px solid #e2e8f0;padding-top:8px}
+  @media print{ body{margin:16mm} .noprint{display:none} button{display:none} }
+</style></head><body>
+<h1>Relatório Softfocus — Painel do CEO</h1>
+<div class="meta">Período: <b>${esc(periodLabel)}</b> · Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+<div class="kpis">
+  <div class="kpi"><span>Total de registros</span><b>${dashSubs.length}</b></div>
+  <div class="kpi"><span>Índice de humor (médio)</span><b>${avgScore}</b></div>
+  <div class="kpi"><span>Colaboradores únicos</span><b>${new Set(dashSubs.map((s) => s.employeeId)).size}</b></div>
+</div>
+<h2>Distribuição de humor</h2>
+<table><thead><tr><th>Humor</th><th>Registros</th></tr></thead><tbody>
+${moodCounts.map((m) => `<tr><td>${esc(m.label)}</td><td>${m.count}</td></tr>`).join("")}
+</tbody></table>
+<h2>Registros (${rows.length})</h2>
+<table><thead><tr><th>Data</th><th>Horário</th><th>ID</th><th>Nome</th><th>Humor</th><th>Score</th><th>Tags</th><th>Comentário</th></tr></thead><tbody>
+${rows.map((r) => `<tr><td>${esc(r.data)}</td><td>${esc(r.hora)}</td><td>${esc(r.id)}</td><td>${esc(r.nome)}</td><td>${esc(r.humor)}</td><td>${r.score}</td><td>${esc(r.tags)}</td><td>${esc(r.comentario)}</td></tr>`).join("")}
+</tbody></table>
+<div class="footer">Softfocus Soluções Tecnológicas Ltda. · CNPJ 04.962.314/0001-08 · Documento confidencial</div>
+<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#dc2626;color:#fff;border:0;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer">Imprimir / Salvar como PDF</button></div>
+<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));</script>
+</body></html>`;
+                const win = window.open("", "_blank");
+                if (!win) {
+                  window.alert("Permita pop-ups para gerar o PDF.");
+                  return;
+                }
+                win.document.open();
+                win.document.write(html);
+                win.document.close();
+              };
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={exportCSV}
+                    className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg border border-emerald-700 flex items-center justify-center gap-3 transition-all hover:shadow-xl"
+                  >
+                    <span className="text-xl" aria-hidden>📥</span>
+                    <span className="uppercase tracking-wider text-sm text-left">
+                      Exportar CSV ({periodShort}) — {dashSubs.length} reg.
+                    </span>
+                  </button>
+                  <button
+                    onClick={exportPDF}
+                    className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg border border-rose-700 flex items-center justify-center gap-3 transition-all hover:shadow-xl"
+                  >
+                    <span className="text-xl" aria-hidden>📄</span>
+                    <span className="uppercase tracking-wider text-sm text-left">
+                      Compartilhar PDF ({periodShort}) — {dashSubs.length} reg.
+                    </span>
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         )}
       </main>
