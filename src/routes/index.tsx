@@ -856,8 +856,8 @@ function App() {
                                 {sub.employeeId}
                               </span>
                             </div>
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              {activeFilter ? formatBR(sub.submissionDate) : sub.timestamp}
+                            <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
+                              {formatBR(sub.submissionDate)} • {sub.timestamp}
                             </span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium mt-1 italic">"{sub.comment}"</p>
